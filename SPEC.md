@@ -446,6 +446,10 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `PATH_VISUALIZED` | `path_visualized` | extra.{path, view_type, color, clear_previous} | 路径可视化 |
 | `PATH_EXECUTED` | `path_executed` | extra.{success, message} | 路径执行完成 |
 | `NAVIGATION_MAP_UPDATED` | `navigation_map_updated` | extra.{grid_info} | 导航地图更新 |
+| `PATH_START_SELECTED` | `path_start_selected` | position, target_id (element_id) | 路径起点选择 |
+| `PATH_END_SELECTED` | `path_end_selected` | position, target_id (element_id) | 路径终点选择 |
+| `PATH_SELECTION_MODE_CHANGED` | `path_selection_mode_changed` | extra.mode | 路径选择模式变化 |
+| `PATH_SELECTION_CLEARED` | `path_selection_cleared` | - | 路径选择清除 |
 
 ### 7.5 模型模板事件
 
@@ -810,6 +814,7 @@ def broadcast_event(event: ViewSyncEvent):
 
 | 版本 | 日期 | 变更内容 |
 |------|------|---------|
+| 2.0.1 | 2026-03-02 | **路径规划增强**：新增路径选择事件（PATH_START_SELECTED、PATH_END_SELECTED、PATH_SELECTION_MODE_CHANGED、PATH_SELECTION_CLEARED），支持多视图同步选择起点/终点 |
 | 2.0.0 | 2026-03-02 | **重大重构**：协议重新定位为虚拟世界通用协议；ElementType 简化为 SPACE/ENTITY；业务分类通过 category 实现；移除所有领域特定事件 |
 | 1.5.0 | 2026-03-02 | 模型库支持：新增模型库事件、元素模板管理、智能回退渲染机制 |
 | 1.4.0 | 2026-03-02 | 机器人支持：新增机器人事件、元素管理混入类，支持机器人位置同步 |
