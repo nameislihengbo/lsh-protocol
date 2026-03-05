@@ -27,7 +27,7 @@ def on_position_changed(event):
 
 def main():
     print("=" * 50)
-    print("LSH Protocol v2.0.0 - Basic Usage Example")
+    print("LSH Protocol v2.6.0 - Basic Usage Example")
     print("=" * 50)
     
     # Subscribe to events

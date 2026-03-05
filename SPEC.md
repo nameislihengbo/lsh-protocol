@@ -4,7 +4,7 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 2.4.0              |
+| 版本   | 2.6.0              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
 | 日期   | 2026-03-04         |
@@ -79,7 +79,7 @@ LSH 协议将虚拟世界抽象为四个核心要素：
 
 **注意**：协议使用 Element 作为抽象概念，渲染引擎实现时映射到具体的可视化对象（如 VTK 的 Actor）。
 
-### 3.3 业务分类
+### 3.4 业务分类
 
 业务类型通过 `category` 字段实现，用户可自定义：
 
@@ -97,9 +97,194 @@ LSH 协议将虚拟世界抽象为四个核心要素：
 
 ---
 
-## 4. 动机 (Motivation)
+## 4. 分层架构设计 (Layered Architecture)
 
-### 4.1 问题背景
+### 4.1 核心理念
+
+**数据与渲染彻底分离**：业务模型完全独立于渲染引擎，可随时切换渲染实现而不影响业务逻辑。
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    分层架构设计                              │
+├─────────────────────────────────────────────────────────────┤
+│                                                             │
+│    ┌─────────────────────────────────────────────────────┐  │
+│    │              Model 层（业务世界）                    │  │
+│    │                                                     │  │
+│    │  职责：定义数据结构，不涉及渲染实现                 │  │
+│    │  • 位置、尺寸、角度、类型、状态                     │  │
+│    │  • 几何：球体/立方体/圆柱/STL/复杂模型              │  │
+│    │  • 可完全不依赖任何渲染库                           │  │
+│    │                                                     │  │
+│    │  调试时：使用简单几何体代替                         │  │
+│    │  展示时：切换为精细模型                             │  │
+│    └─────────────────────────────────────────────────────┘  │
+│                            │                                │
+│                            ▼                                │
+│    ┌─────────────────────────────────────────────────────┐  │
+│    │              ActorFactory 层（转换器）               │  │
+│    │                                                     │  │
+│    │  职责：将业务模型转换为可渲染对象                   │  │
+│    │  • 输入：任意 Model                                 │  │
+│    │  • 输出：vtkActor（或其他引擎的绘制对象）           │  │
+│    │                                                     │  │
+│    │  职责范围：                                         │  │
+│    │  • 绑定几何数据                                     │  │
+│    │  • 设置颜色、透明度、样式                           │  │
+│    │  • 不创建几何体、不编写业务逻辑                     │  │
+│    └─────────────────────────────────────────────────────┘  │
+│                            │                                │
+│                            ▼                                │
+│    ┌─────────────────────────────────────────────────────┐  │
+│    │              View/Render 层（画布）                  │  │
+│    │                                                     │  │
+│    │  职责：负责渲染输出                                 │  │
+│    │  • 窗口、相机、光照、交互                           │  │
+│    │  • 添加/移除 Actor                                  │  │
+│    │  • 拾取、旋转、缩放                                 │  │
+│    │  • 不感知 Model 内部结构                            │  │
+│    └─────────────────────────────────────────────────────┘  │
+│                                                             │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### 4.2 一句话口诀
+
+> **Model 定长相，Factory 转演员，Render 只管上场。**
+
+### 4.3 核心价值
+
+| 价值 | 说明 |
+| --- | --- |
+| **引擎无关** | 业务逻辑可脱离渲染引擎独立运行、测试 |
+| **灵活切换** | 调试时使用简单几何体，展示时切换为精细模型 |
+| **单一职责** | 每层只做一件事，边界清晰 |
+| **可测试性** | Model 层可纯单元测试，无需渲染环境 |
+
+### 4.4 层级职责对照
+
+| 层级 | 输入 | 输出 | 职责边界 |
+| --- | --- | --- | --- |
+| **Model 层** | 业务数据 | SceneElement | 只定义数据结构，不依赖渲染库 |
+| **ActorFactory 层** | SceneElement | vtkActor/引擎对象 | 只做渲染对象创建，不编写业务逻辑 |
+| **View/Render 层** | Actor | 画面 | 只做渲染和交互，不感知 Model 结构 |
+
+### 4.5 实现示例
+
+```python
+# ===== Model 层：纯业务数据，无渲染依赖 =====
+@dataclass
+class DeviceModel:
+    """设备模型 - 完全不依赖 VTK"""
+    id: str
+    name: str
+    position: List[float, float, float]
+    geometry_type: str = "cube"  # cube, sphere, cylinder, custom
+    size: List[float, float, float] = [0.5, 0.5, 0.5]
+    
+    def get_bounds(self) -> Bounds:
+        """计算边界 - 纯数学运算"""
+        x, y, z = self.position
+        w, d, h = self.size
+        return Bounds(
+            min_x=x - w/2, max_x=x + w/2,
+            min_y=y - d/2, max_y=y + d/2,
+            min_z=z, max_z=z + h
+        )
+
+
+# ===== ActorFactory 层：Model → Actor 转换 =====
+class DeviceActorFactory:
+    """设备 Actor 工厂 - 只做渲染对象创建"""
+    
+    def create(self, model: DeviceModel) -> vtkActor:
+        """根据 Model 创建 Actor"""
+        # 选择几何源
+        if model.geometry_type == "cube":
+            source = vtk.vtkCubeSource()
+        elif model.geometry_type == "sphere":
+            source = vtk.vtkSphereSource()
+        else:
+            source = vtk.vtkCubeSource()
+        
+        # 设置几何参数
+        source.SetCenter(*CoordTransform.lsh_to_vtk_position(model.position))
+        source.SetXLength(model.size[0])
+        source.SetYLength(model.size[2])
+        source.SetZLength(model.size[1])
+        
+        # 创建 Actor
+        mapper = vtk.vtkPolyDataMapper()
+        mapper.SetInputConnection(source.GetOutputPort())
+        
+        actor = vtk.vtkActor()
+        actor.SetMapper(mapper)
+        actor.SetUserData(model.id)  # 关联 Model ID
+        
+        return actor
+    
+    def update(self, actor: vtkActor, model: DeviceModel):
+        """更新 Actor 属性"""
+        actor.SetPosition(*CoordTransform.lsh_to_vtk_position(model.position))
+        # ... 其他属性更新
+
+
+# ===== View/Render 层：只管渲染 =====
+class VTK3DView:
+    """VTK 3D 视图 - 只负责渲染和交互"""
+    
+    def __init__(self):
+        self._renderer = vtk.vtkRenderer()
+        self._actors: Dict[str, vtkActor] = {}
+    
+    def add_actor(self, actor_id: str, actor: vtkActor):
+        """添加 Actor - 不感知 Model 结构"""
+        self._actors[actor_id] = actor
+        self._renderer.AddActor(actor)
+    
+    def remove_actor(self, actor_id: str):
+        """移除 Actor"""
+        if actor_id in self._actors:
+            self._renderer.RemoveActor(self._actors[actor_id])
+            del self._actors[actor_id]
+    
+    def render(self):
+        """渲染画面"""
+        self._render_window.Render()
+```
+
+### 4.6 设计原则
+
+| 原则 | 说明 |
+| --- | --- |
+| **Model 纯净** | Model 类不导入任何渲染库（vtk, godot, three.js 等） |
+| **Factory 单向** | Factory 只从 Model 读取数据，不修改 Model |
+| **View 无知** | View 不知道 Model 的存在，只操作 Actor |
+| **依赖方向** | View → Actor → Model，单向依赖 |
+
+### 4.7 禁止行为
+
+| 禁止 | 原因 |
+| --- | --- |
+| ❌ Model 层导入渲染库 | 破坏引擎无关性 |
+| ❌ Factory 写业务逻辑 | 违反单一职责 |
+| ❌ View 直接操作 Model | 跨层调用，耦合严重 |
+| ❌ Actor 存储业务状态 | Actor 只是渲染壳，状态应在 Model |
+
+### 4.8 核心洞察
+
+> 即使移除 VTK 渲染引擎，业务模型逻辑仍保持完整，仅需替换渲染实现即可恢复可视化功能。
+
+这意味着：
+- 业务逻辑可独立测试、独立演进
+- 渲染引擎可随时替换（VTK → Godot → Three.js）
+- 调试时使用简单几何体，发布时切换为精细模型
+
+---
+
+## 5. 动机 (Motivation)
+
+### 5.1 问题背景
 
 在虚拟世界可视化系统中，同一数据需要在多个视图中展示：
 
@@ -116,7 +301,7 @@ LSH 协议将虚拟世界抽象为四个核心要素：
 2. **易遗漏**：新增视图时容易忘记添加更新调用
 3. **不一致**：不同操作的更新逻辑分散，难以维护
 
-### 4.2 解决方案
+### 5.2 解决方案
 
 LSH 协议采用**发布-订阅模式**，将数据变化抽象为事件：
 
@@ -128,7 +313,7 @@ LSH 协议采用**发布-订阅模式**，将数据变化抽象为事件：
 
 ---
 
-## 5. 术语定义 (Terminology)
+## 6. 术语定义 (Terminology)
 
 | 术语                              | 定义                                                  |
 | --------------------------------- | ----------------------------------------------------- |
@@ -143,9 +328,9 @@ LSH 协议采用**发布-订阅模式**，将数据变化抽象为事件：
 
 ---
 
-## 6. 坐标系统 (Coordinate System)
+## 7. 坐标系统 (Coordinate System)
 
-### 6.1 统一坐标系
+### 7.1 统一坐标系
 
 LSH 协议采用**右手坐标系**（建筑/BIM 风格），所有视图必须遵循统一的坐标系统：
 
@@ -173,7 +358,7 @@ Y (深度/depth，向前)
 2. **直觉性**：Z 轴向上，符合"高度"概念
 3. **俯视图兼容**：俯视图直接是 X-Y 平面，无需坐标转换
 
-### 6.2 视图坐标适配
+### 7.2 视图坐标适配
 
 | 视图                      | 原始坐标系 | 适配方式                                        |
 | ------------------------- | ---------- | ----------------------------------------------- |
@@ -182,11 +367,11 @@ Y (深度/depth，向前)
 | **3D 视图 (Godot)** | Z 轴向后 | 转换公式：Godot(X, Y, Z) = LSH(X, Z, -Y) |
 | **结构视图**        | 无坐标     | 不涉及                                          |
 
-### 6.3 3D 引擎坐标转换规范
+### 7.3 3D 引擎坐标转换规范
 
 不同 3D 引擎使用不同的坐标系，LSH 协议定义统一的转换规范：
 
-#### 6.3.1 坐标系对比
+#### 7.3.1 坐标系对比
 
 | 引擎               | X 轴         | Y 轴         | Z 轴          | 坐标系类型 |
 | ------------------ | ------------ | ------------ | ------------- | ---------- |
@@ -198,7 +383,7 @@ Y (深度/depth，向前)
 
 **说明**：LSH 协议与 Blender 坐标系完全一致（建筑/BIM 风格）。
 
-#### 6.3.2 转换公式
+#### 7.3.2 转换公式
 
 **LSH → Godot**：
 
@@ -240,7 +425,7 @@ VTK(X, Y, Z) = LSH(X, Z, Y)
 Blender(X, Y, Z) = LSH(X, Y, Z)
 ```
 
-#### 6.3.3 尺寸转换
+#### 7.3.3 尺寸转换
 
 尺寸只做轴映射，不取负值：
 
@@ -252,7 +437,7 @@ Blender(X, Y, Z) = LSH(X, Y, Z)
 
 **说明**：LSH 与 Blender 尺寸完全一致。
 
-#### 6.3.4 边界转换
+#### 7.3.4 边界转换
 
 **LSH → Godot 边界**：
 
@@ -286,7 +471,7 @@ def lsh_to_vtk_bounds(lsh_min, lsh_max):
 
 **LSH ↔ Blender**：无需转换
 
-#### 6.3.5 实现规范
+#### 7.3.5 实现规范
 
 **统一转换层**：
 
@@ -335,7 +520,7 @@ class CoordTransform:
 | **引擎端**    | 直接使用 | 接收数据直接渲染，不再转换    |
 | **返回数据**  | 逆向转换 | 边界等返回数据转回 LSH 坐标系 |
 
-#### 6.3.6 内外坐标系分离架构
+#### 7.3.6 内外坐标系分离架构
 
 **核心原则**：系统对外统一使用 LSH 坐标系，内部渲染层做透明转换。
 
@@ -429,7 +614,7 @@ class VTK3DView:
 | ❌ 外部接口暴露引擎坐标                 | 增加调用方负担               |
 | ❌ 返回数据未转换回 LSH                 | 违反输入输出一致性原则       |
 
-### 6.4 文字标签处理
+### 7.4 文字标签处理
 
 由于 2D 视图翻转了 Y 轴，文字标签需要额外处理：
 
@@ -445,7 +630,7 @@ label.setPos((w - label_width) / 2, (h + label_height) / 2)
 info_label.setPos((w - info_width) / 2, 5 + info_height)
 ```
 
-### 6.5 2D 视图坐标转换
+### 7.5 2D 视图坐标转换
 
 2D 视图显示俯视图（X-Y 平面），需要将 3D 坐标投影到 2D：
 
@@ -472,9 +657,9 @@ def from_2d_top_view(x: float, y: float, z: float = 0.0) -> PositionData:
 
 ---
 
-## 7. 数据结构 (Data Structures)
+## 8. 数据结构 (Data Structures)
 
-### 7.1 位置数据 (PositionData)
+### 8.1 位置数据 (PositionData)
 
 ```python
 @dataclass
@@ -496,7 +681,7 @@ class PositionData:
         )
 ```
 
-### 7.2 尺寸数据 (SizeData)
+### 8.2 尺寸数据 (SizeData)
 
 ```python
 @dataclass
@@ -516,7 +701,7 @@ class SizeData:
         return {"width": self.width, "depth": self.depth, "height": self.height}
 ```
 
-### 7.3 边界数据 (Bounds)
+### 8.3 边界数据 (Bounds)
 
 ```python
 @dataclass
@@ -548,7 +733,7 @@ class Bounds:
         return self.max_z - self.min_z
   
     @property
-    def center(self) -> Tuple[float, float, float]:
+    def center(self) -> List[float, float, float]:
         return (
             (self.min_x + self.max_x) / 2,
             (self.min_y + self.max_y) / 2,
@@ -564,7 +749,7 @@ class Bounds:
         )
 ```
 
-### 7.4 事件数据 (ViewSyncEvent)
+### 8.4 事件数据 (ViewSyncEvent)
 
 ```python
 @dataclass
@@ -579,7 +764,7 @@ class ViewSyncEvent:
     extra: Dict[str, Any] = field(default_factory=dict)  # 扩展字段
 ```
 
-### 7.5 场景元素 (SceneElement)
+### 8.5 场景元素 (SceneElement)
 
 ```python
 class ElementType(Enum):
@@ -609,12 +794,12 @@ class SceneElement:
     element_type: ElementType            # 元素类型（SPACE/ENTITY）
   
     # 变换属性
-    position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    rotation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    position: List[float, float, float] = [0.0, 0.0, 0.0]
+    rotation: List[float, float, float] = [0.0, 0.0, 0.0]
     scale: float = 1.0
   
     # 尺寸信息
-    size: Tuple[float, float, float] = (1.0, 1.0, 1.0)
+    size: List[float, float, float] = [1.0, 1.0, 1.0]
   
     # 边界（SPACE 必须有）
     bounds: Optional[Bounds] = None
@@ -629,7 +814,7 @@ class SceneElement:
   
     # 扩展数据
     extra: Dict[str, Any] = field(default_factory=dict)
-  
+    
     # 元数据
     created_at: str = field(default_factory=lambda: datetime.now().isoformat())
     updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
@@ -639,7 +824,34 @@ class SceneElement:
     searchable: bool = True
 ```
 
-### 7.6 元素注册表 (SceneElementRegistry)
+**extra 字段设计原则**：
+
+`extra` 是一个灵活的扩展字段，用于存储与元素相关的额外数据。但有以下限制：
+
+1. **只存储简单数据**：字符串、数字、布尔值、列表、字典
+2. **不存储复杂对象**：不应存储 SceneElement 或其他复杂对象
+3. **关联元素使用 ID 引用**：如需关联其他元素，使用 `parent_id`/`children_ids` 或存储 ID 列表
+
+```python
+# ✅ 正确用法
+device.set_extra_property("room_id", "room_001")
+device.set_extra_property("state", "on")
+device.set_extra_property("power", 60)
+
+# ❌ 错误用法
+device.set_extra_property("room", room_object)  # 不应存储对象
+```
+
+**典型用途**：
+
+| 元素类型 | extra 中存储的内容 |
+|---------|-------------------|
+| 房间 | `room_type`, `device_ids`, `component_ids` |
+| 设备 | `device_type`, `state`, `room_id` |
+| 家具 | `furniture_type`, `room_id` |
+| 物品 | `item_type`, `quantity`, `expiry_date` |
+
+### 8.6 元素注册表 (SceneElementRegistry)
 
 ```python
 class SceneElementRegistry:
@@ -701,16 +913,16 @@ class SceneElementRegistry:
         pass
   
     def update_position_cascade(self, element_id: str, 
-                                 new_position: Tuple[float, float, float]) -> None:
+                                 new_position: List[float, float, float]) -> None:
         """级联更新位置（父元素移动时自动更新子元素）"""
         pass
 ```
 
 ---
 
-## 8. 事件类型 (Event Types)
+## 9. 事件类型 (Event Types)
 
-### 8.1 统一元素事件
+### 9.1 统一元素事件
 
 LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 SPACE/ENTITY，通过 `extra.category` 区分业务类型：
 
@@ -724,7 +936,7 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `ELEMENT_HIERARCHY_CHANGED`  | `element_hierarchy_changed`  | parent_id, extra      | 元素层级关系变化 |
 | `ELEMENTS_SYNC`              | `elements_sync`              | extra.elements        | 批量同步所有元素 |
 
-### 8.2 场景事件
+### 9.2 场景事件
 
 | 事件类型                 | 值                       | 携带数据                                         | 说明         |
 | ------------------------ | ------------------------ | ------------------------------------------------ | ------------ |
@@ -732,15 +944,15 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `SCENE_CHANGED`        | `scene_changed`        | extra                                            | 场景变化     |
 | `SCENE_BOUNDS_CHANGED` | `scene_bounds_changed` | extra.{min_x, max_x, min_y, max_y, min_z, max_z} | 场景边界变化 |
 
-### 8.3 编辑模式事件
+### 9.3 编辑模式事件
 
 | 事件类型              | 值                    | 携带数据      | 说明         |
 | --------------------- | --------------------- | ------------- | ------------ |
 | `EDIT_MODE_CHANGED` | `edit_mode_changed` | extra.enabled | 编辑模式切换 |
 
-### 8.4 路径规划事件
+### 9.4 路径规划事件
 
-#### 8.4.1 基础路径事件
+#### 9.4.1 基础路径事件
 
 | 事件类型                   | 值                         | 携带数据                                          | 说明         |
 | -------------------------- | -------------------------- | ------------------------------------------------- | ------------ |
@@ -749,7 +961,7 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `PATH_EXECUTED`          | `path_executed`          | extra.{success, message}                          | 路径执行完成 |
 | `NAVIGATION_MAP_UPDATED` | `navigation_map_updated` | extra.{grid_info}                                 | 导航地图更新 |
 
-#### 8.4.2 路径选择事件
+#### 9.4.2 路径选择事件
 
 | 事件类型                        | 值                              | 携带数据                           | 说明             |
 | ------------------------------- | ------------------------------- | ---------------------------------- | ---------------- |
@@ -761,7 +973,7 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `PATH_SELECTION_MODE_CHANGED` | `path_selection_mode_changed` | extra.mode                         | 路径选择模式变化 |
 | `PATH_SELECTION_CLEARED`      | `path_selection_cleared`      | -                                  | 路径选择清除     |
 
-#### 8.4.3 路径规划模式事件
+#### 9.4.3 路径规划模式事件
 
 | 事件类型                            | 值                                  | 携带数据                                   | 说明             |
 | ----------------------------------- | ----------------------------------- | ------------------------------------------ | ---------------- |
@@ -771,9 +983,9 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `PATH_COVERAGE_PROGRESS`          | `path_coverage_progress`          | extra.{progress, covered_area, total_area} | 覆盖进度更新     |
 | `PATH_COVERAGE_COMPLETED`         | `path_coverage_completed`         | extra.{success, coverage_rate, path}       | 覆盖完成         |
 
-### 8.5 路径规划数据结构
+### 9.5 路径规划数据结构
 
-#### 8.5.1 路径规划配置
+#### 9.5.1 路径规划配置
 
 ```python
 @dataclass
@@ -804,7 +1016,7 @@ class PathPlanningConfig:
     simplify_path: bool = True         # 是否简化路径
 ```
 
-#### 8.5.2 路径规划模式
+#### 9.5.2 路径规划模式
 
 ```python
 class PathPlanningMode(Enum):
@@ -815,7 +1027,7 @@ class PathPlanningMode(Enum):
     OBSTACLE_AVOIDANCE = "avoidance"   # 避障模式：动态避障
 ```
 
-#### 8.5.3 覆盖路径结果
+#### 9.5.3 覆盖路径结果
 
 ```python
 @dataclass
@@ -830,9 +1042,9 @@ class CoveragePathResult:
     algorithm: str                     # 使用的算法
 ```
 
-### 8.6 路径规划交互流程
+### 9.6 路径规划交互流程
 
-#### 8.6.1 普通路径规划流程
+#### 9.6.1 普通路径规划流程
 
 ```
 1. 点击"路径规划"按钮 → 进入路径选择模式
@@ -843,7 +1055,7 @@ class CoveragePathResult:
 6. 可视化路径 → 发布 PATH_VISUALIZED 事件
 ```
 
-#### 8.6.2 途径点路径规划流程
+#### 9.6.2 途径点路径规划流程
 
 ```
 1. 点击"路径规划"按钮 → 进入路径选择模式
@@ -1332,7 +1544,7 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
 | **取消选择** | ESC      | 取消选中，恢复原色 | -            |
 | **删除**     | Delete   | 删除选中实体       | -            |
 
-#### 13.3.3 放置模式操作
+#### 13.4.4 放置模式操作
 
 | 操作           | 鼠标按键 | 行为             |
 | -------------- | -------- | ---------------- |
@@ -1340,9 +1552,9 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
 | **放置** | 左键单击 | 确认放置位置     |
 | **取消** | ESC      | 取消放置模式     |
 
-### 13.4 坐标系与旋转方向
+### 13.5 坐标系与旋转方向
 
-#### 13.4.1 坐标系定义
+#### 13.5.1 坐标系定义
 
 LSH 协议采用**右手坐标系**（建筑/BIM 风格，详见第 6 章）：
 
@@ -1364,7 +1576,7 @@ Y (深度/depth，向前)
 | **Y** | 向前   | 深度方向 | depth (深度)  |
 | **Z** | 向上   | 高度方向 | height (高度) |
 
-#### 13.4.2 旋转中心约定
+#### 13.5.2 旋转中心约定
 
 **重要说明**：采用 **SolidWorks 模型旋转视角**，用户看到的是"模型在旋转"，而非"相机在旋转"。
 
@@ -1415,7 +1627,7 @@ camera.Elevation(dy * factor)
 | **模型旋转（SolidWorks）** | 模型向右旋转 | 浮动（鼠标位置） | 用户感觉模型在动 |
 | **相机旋转（VTK 默认）**   | 场景向左旋转 | 固定（场景原点） | 用户感觉视角在动 |
 
-#### 13.4.3 实体旋转约定
+#### 13.5.3 实体旋转约定
 
 | 操作               | 方向       | 角度变化 |
 | ------------------ | ---------- | -------- |
@@ -1430,9 +1642,9 @@ new_rotation = current_rotation + dx * factor
 actor.SetOrientation(0, 0, new_rotation)
 ```
 
-### 13.5 视觉反馈
+### 13.6 视觉反馈
 
-#### 13.5.1 选中状态
+#### 13.6.1 选中状态
 
 | 状态             | 视觉效果                      |
 | ---------------- | ----------------------------- |
@@ -1440,7 +1652,7 @@ actor.SetOrientation(0, 0, new_rotation)
 | **选中**   | 黄色高亮 (RGB: 1.0, 0.8, 0.0) |
 | **拖动中** | 半透明 (Opacity: 0.7)         |
 
-#### 13.5.2 放置预览
+#### 13.6.2 放置预览
 
 | 状态               | 视觉效果                                |
 | ------------------ | --------------------------------------- |
@@ -1448,9 +1660,9 @@ actor.SetOrientation(0, 0, new_rotation)
 | **可放置**   | 预览正常显示                            |
 | **不可放置** | 预览显示红色                            |
 
-### 13.6 交互事件
+### 13.7 交互事件
 
-#### 13.6.1 交互状态事件
+#### 13.7.1 交互状态事件
 
 | 事件类型                     | 值                           | 携带数据                    | 说明         |
 | ---------------------------- | ---------------------------- | --------------------------- | ------------ |
@@ -1462,7 +1674,7 @@ actor.SetOrientation(0, 0, new_rotation)
 | `ELEMENT_ROTATE_START`     | `element_rotate_start`     | target_id, rotation         | 开始旋转元素 |
 | `ELEMENT_ROTATE_END`       | `element_rotate_end`       | target_id, rotation         | 结束旋转元素 |
 
-#### 13.6.2 相机事件
+#### 13.7.2 相机事件
 
 | 事件类型                | 值                      | 携带数据                   | 说明                                       |
 | ----------------------- | ----------------------- | -------------------------- | ------------------------------------------ |
@@ -1471,9 +1683,9 @@ actor.SetOrientation(0, 0, new_rotation)
 | `CAMERA_ZOOMED`       | `camera_zoomed`       | extra.{factor, position}   | 相机缩放                                   |
 | `CAMERA_VIEW_CHANGED` | `camera_view_changed` | extra.view_type            | 相机视角切换（top/front/side/perspective） |
 
-### 13.7 实现参考
+### 13.8 实现参考
 
-#### 13.7.1 相机旋转实现
+#### 13.8.1 相机旋转实现
 
 ```python
 def rotate_camera(self, dx: float, dy: float):
@@ -1499,7 +1711,7 @@ def rotate_camera(self, dx: float, dy: float):
     self._render()
 ```
 
-#### 13.7.2 实体拖动实现
+#### 13.8.2 实体拖动实现
 
 ```python
 def drag_element(self, screen_x: float, screen_y: float):
@@ -1530,7 +1742,7 @@ def drag_element(self, screen_x: float, screen_y: float):
     self._render()
 ```
 
-### 13.8 兼容性说明
+### 13.9 兼容性说明
 
 | 渲染引擎           | 相机 API                                     | 实体 API                                            | 拾取 API                         |
 | ------------------ | -------------------------------------------- | --------------------------------------------------- | -------------------------------- |
@@ -1544,6 +1756,8 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                  |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.6.0 | 2026-03-06 | **事件溯源架构**：定义事件溯源接口，支持时间旅行和状态回滚；新增 EventSourcingManager 管理器；完善路径规划适配新 LSH 架构 |
+| 2.5.0 | 2026-03-04 | **分层架构设计**：新增分层架构设计章节，定义 Model/ActorFactory/View 三层分离架构；确立"数据与渲染彻底分离"核心理念；明确层级职责、设计原则、禁止行为；口诀"Model定长相，Factory转演员，Render只管上场" |
 | 2.4.0 | 2026-03-04 | **内外坐标系分离架构**：新增架构规范章节，明确"输入数据使用LSH、输出数据使用LSH、内部渲染层转换"原则；定义架构规则、实现示例、禁止行为；确保系统对外统一使用LSH坐标系，内部渲染层透明转换 |
 | 2.3.0 | 2026-03-04 | **3D 引擎坐标转换规范**：新增 3D 引擎坐标转换规范章节，定义 LSH/Godot/VTK/Blender 坐标系转换规则；统一 Python 端转换，避免各引擎重复实现；采用建筑/BIM 风格坐标系（X=右, Y=前, Z=上）                                               |
 | 2.2.0 | 2026-03-03 | **路径规划增强**：新增途径点事件（PATH_WAYPOINT_ADDED/REMOVED/CLEARED）、覆盖模式事件（PATH_COVERAGE_MODE_CHANGED/PROGRESS/COMPLETED）、避障配置事件（PATH_OBSTACLE_AVOIDANCE_CHANGED）；定义 PathPlanningConfig 数据结构和交互流程 |
@@ -1561,10 +1775,10 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 ## 15. 未来规划 (Roadmap)
 
-### 15.1 v2.4.0 计划
+### 15.1 v2.7.0 计划
 
-- [ ] **事件溯源**：时间旅行、状态回滚
 - [ ] **跨语言 SDK**：JavaScript/TypeScript 支持
+- [ ] **性能优化**：大规模场景渲染优化
 
 ### 15.2 v3.0.0 愿景
 

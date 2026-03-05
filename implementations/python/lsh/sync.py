@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-LSH_PROTOCOL_VERSION = "2.0.0"
+LSH_PROTOCOL_VERSION = "2.6.0"
 
 
 class ViewSyncEvents(Enum):
     """View synchronization event types
     
-    LSH Protocol v2.0.0 - Unified element events
+    LSH Protocol v2.6.0 - Unified element events
     
     Design principles:
     1. Unified element events: All scene elements use ELEMENT_* events

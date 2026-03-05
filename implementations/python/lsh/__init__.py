@@ -22,7 +22,7 @@ from .sync import (
     view_sync,
 )
 
-__version__ = "2.0.0"
+__version__ = "2.6.0"
 __author__ = "Li Hengbo"
 __license__ = "MIT"
 
