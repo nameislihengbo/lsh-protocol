@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-LSH_PROTOCOL_VERSION = "2.6.0"
+LSH_PROTOCOL_VERSION = "2.6.1"
 
 
 class ViewSyncEvents(Enum):
     """View synchronization event types
     
-    LSH Protocol v2.6.0 - Unified element events
+    LSH Protocol v2.6.1 - Unified element events with source marking
     
     Design principles:
     1. Unified element events: All scene elements use ELEMENT_* events
@@ -130,7 +130,10 @@ class SizeData:
 
 @dataclass
 class ViewSyncEvent:
-    """View synchronization event data structure"""
+    """View synchronization event data structure
+    
+    LSH Protocol v2.6.1 - Added source field for loop prevention
+    """
     event_type: ViewSyncEvents
     target_id: str
     target_type: str = ""
@@ -138,6 +141,7 @@ class ViewSyncEvent:
     size: Optional[SizeData] = None
     parent_id: Optional[str] = None
     extra: Dict[str, Any] = field(default_factory=dict)
+    source: Optional[str] = None
     
     def to_dict(self) -> Dict[str, Any]:
         result = {
@@ -153,6 +157,8 @@ class ViewSyncEvent:
             result["parent_id"] = self.parent_id
         if self.extra:
             result["extra"] = self.extra
+        if self.source:
+            result["source"] = self.source
         return result
 
 
@@ -334,19 +340,21 @@ class ViewSyncManager:
         ))
     
     def publish_element_position_changed(self, element_id: str, element_type: 'ElementType',
-                                          x: float, y: float, z: float = 0.0):
+                                          x: float, y: float, z: float = 0.0, source: str = None):
         """Publish element position changed event
         
         Args:
             element_id: Element ID
             element_type: Element type (SPACE or ENTITY)
             x, y, z: New position
+            source: Event source identifier (for loop prevention)
         """
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_POSITION_CHANGED,
             target_id=element_id,
             target_type=element_type.value if hasattr(element_type, 'value') else str(element_type),
-            position=PositionData(x, y, z)
+            position=PositionData(x, y, z),
+            source=source
         ))
     
     def publish_element_visibility_changed(self, element_id: str, element_type: 'ElementType',

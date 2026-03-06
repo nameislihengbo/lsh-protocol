@@ -4,10 +4,10 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 2.6.0              |
+| 版本   | 2.6.1              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
-| 日期   | 2026-03-04         |
+| 日期   | 2026-03-06         |
 | 许可证 | MIT                |
 
 ---
@@ -357,6 +357,38 @@ Y (深度/depth，向前)
 1. **建筑/BIM 习惯**：地面是 X-Y 平面，平面图直接对应
 2. **直觉性**：Z 轴向上，符合"高度"概念
 3. **俯视图兼容**：俯视图直接是 X-Y 平面，无需坐标转换
+
+### 7.1.1 位置信息的建筑语义
+
+**重要原则：位置信息表示模型的底部（底面中心），而非几何中心。**
+
+对于任意立方体模型：
+- `position = (x, y, z)` 表示模型**底面中心**的世界坐标
+- `size = (width, depth, height)` 表示模型的尺寸
+- 模型的**底部 Z 坐标** = `z`
+- 模型的**顶部 Z 坐标** = `z + height`
+
+**示例**：
+```python
+# 一个立方体，位置 (0, 0, 2)，高度 5
+position = (0, 0, 2)   # 底面中心在 (0, 0, 2)
+size = (3, 3, 5)       # 高度为 5
+
+# 实际空间范围：
+# - 底部 Z = 2
+# - 顶部 Z = 2 + 5 = 7
+# - 几何中心 Z = 2 + 5/2 = 4.5
+```
+
+**建筑逻辑**：
+1. **地板**：`position.z = 0` 表示地板底面在地面上，地板顶面在 `z + thickness`
+2. **家具**：`position.z = 0` 表示家具底部接触地面
+3. **设备**：`position.z = 2.5` 表示设备底部离地 2.5 米（如壁挂空调）
+
+**渲染引擎注意事项**：
+- VTK/OpenGL 等引擎默认使用**几何中心**作为原点
+- 渲染时必须进行坐标转换：`actor_position = model_position + (0, 0, height/2)`
+- 确保模型的底部与 LSH 协议的语义一致
 
 ### 7.2 视图坐标适配
 
@@ -754,13 +786,17 @@ class Bounds:
 ```python
 @dataclass
 class ViewSyncEvent:
-    """视图同步事件"""
+    """视图同步事件
+    
+    v2.6.1 新增 source_id 字段，用于防止视图同步循环。
+    """
     event_type: ViewSyncEvents           # 事件类型
     target_id: str                       # 目标对象 ID
     target_type: str = ""                # 目标类型（space/entity）
     position: Optional[PositionData] = None  # 位置信息
     size: Optional[SizeData] = None          # 尺寸信息
     parent_id: Optional[str] = None          # 父元素 ID（层级变化时）
+    source_id: Optional[str] = None          # 事件源 ID（v2.6.1 新增，防止循环）
     extra: Dict[str, Any] = field(default_factory=dict)  # 扩展字段
 ```
 
@@ -935,6 +971,51 @@ LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 
 | `ELEMENT_VISIBILITY_CHANGED` | `element_visibility_changed` | extra.visible         | 元素可见性变化   |
 | `ELEMENT_HIERARCHY_CHANGED`  | `element_hierarchy_changed`  | parent_id, extra      | 元素层级关系变化 |
 | `ELEMENTS_SYNC`              | `elements_sync`              | extra.elements        | 批量同步所有元素 |
+
+### 9.1.1 事件源标记（v2.6.1）
+
+**问题背景**：在多视图同步场景中，视图响应事件后可能再次发布相同事件，导致无限循环。
+
+```
+视图 A → 响应事件 → 发布新事件 → 视图 B 响应 → 发布新事件 → 视图 A → ... (循环)
+```
+
+**解决方案**：使用 `source_id` 字段标识事件来源，视图忽略来自自身的事件。
+
+```python
+# 视图发布事件时设置 source_id 为自身 ID
+event = ViewSyncEvent(
+    event_type=ViewSyncEvents.ELEMENT_POSITION_CHANGED,
+    target_id="device_001",
+    target_type="entity",
+    position=PositionData(x=1.0, y=2.0, z=0.5),
+    source_id="view_3d"  # 标识事件来源
+)
+
+# 视图响应事件时，检查 source_id
+def on_event(event: ViewSyncEvent):
+    if event.source_id == self.view_id:
+        return  # 忽略自身产生的事件，防止循环
+    # 处理事件...
+```
+
+**命名规范**：`source_id` 使用 `{view_type}_{view_id}` 格式，如 `view_3d`、`view_2d`、`view_structure`。
+
+**使用规则**：
+
+| 场景     | source_id 设置           | 说明                          |
+| -------- | ------------------------ | ----------------------------- |
+| 视图发布 | `source_id = self.view_id` | 标识事件来源，防止循环        |
+| 后端发布 | `source_id = None`         | 后端业务逻辑触发，无需过滤    |
+| 用户操作 | `source_id = None`         | 用户直接操作，所有视图需响应  |
+
+**禁止行为**：
+
+| 禁止 | 原因 |
+| --- | --- |
+| ❌ 视图不设置 source_id | 可能导致循环 |
+| ❌ 视图响应自身事件 | 无限循环风险 |
+| ❌ source_id 命名混乱 | 难以识别来源 |
 
 ### 9.2 场景事件
 
@@ -1499,18 +1580,48 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
             "description": "VTK 默认交互",
             "rotate_view": "left_drag",
             "pan_view": "middle_drag",
-            "zoom_view": "scroll"
+            "zoom_view": "scroll",
+            "select_model": null,
+            "move_model": null,
+            "rotate_model": null
         },
         "solidworks": {
             "description": "SolidWorks 风格交互",
             "rotate_view": "middle_drag",
             "pan_view": "right_drag",
-            "zoom_view": "scroll"
+            "zoom_view": "scroll",
+            "select_model": "left_click",
+            "move_model": "left_drag",
+            "rotate_model": "right_drag_selected"
+        },
+        "blender": {
+            "description": "Blender 风格交互",
+            "rotate_view": "middle_drag",
+            "pan_view": "shift_middle_drag",
+            "zoom_view": "scroll",
+            "select_model": "left_click",
+            "move_model": "g_key",
+            "rotate_model": "r_key"
         }
     },
-    "current_mode": "default"
+    "current_mode": "solidworks",
+    "zoom_settings": {
+        "factor": 1.1,
+        "center_on_mouse": true
+    }
 }
 ```
+
+**配置字段说明**：
+
+| 字段            | 类型   | 说明                                   |
+| --------------- | ------ | -------------------------------------- |
+| `rotate_view` | string | 旋转视图的绑定（如 `left_drag`） |
+| `pan_view`    | string | 平移视图的绑定（如 `right_drag`） |
+| `zoom_view`   | string | 缩放视图的绑定（如 `scroll`）    |
+| `select_model`| string | 选择模型的绑定（如 `left_click`） |
+| `move_model`  | string | 移动模型的绑定（如 `left_drag`）  |
+| `rotate_model`| string | 旋转模型的绑定（如 `right_drag_selected`） |
 
 ### 13.4 交互规范
 
@@ -1521,6 +1632,7 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
 | **旋转视图** | 左键拖动 | 相机绕焦点旋转 |
 | **平移视图** | 中键拖动 | 移动相机位置   |
 | **缩放视图** | 滚轮滚动 | 调整视场       |
+| **选择模型** | -        | 不支持         |
 
 #### 13.4.2 SolidWorks 风格交互（current_mode: "solidworks"）
 
@@ -1528,11 +1640,24 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
 
 | 操作               | 鼠标按键 | 行为                 | 说明         |
 | ------------------ | -------- | -------------------- | ------------ |
+| **选择模型** | 左键单击 | 选中模型           | 高亮显示     |
+| **移动模型** | 左键拖动 | 沿平面移动         | 编辑模式     |
 | **旋转视图** | 中键拖动 | 相机绕模型中心旋转   | 改变观察角度 |
 | **平移视图** | 右键拖动 | 移动相机位置         | 模型相对不动 |
 | **缩放视图** | 滚轮滚动 | 以鼠标位置为中心缩放 | 调整视场     |
 
-#### 13.4.3 模型交互（编辑模式）
+#### 13.4.3 Blender 风格交互（current_mode: "blender"）
+
+| 操作               | 鼠标按键         | 行为           |
+| ------------------ | ---------------- | -------------- |
+| **选择模型** | 左键单击         | 选中模型       |
+| **旋转视图** | 中键拖动         | 相机绕焦点旋转 |
+| **平移视图** | Shift+中键拖动   | 移动相机位置   |
+| **缩放视图** | 滚轮滚动         | 调整视场       |
+| **移动模型** | G 键             | 进入移动模式   |
+| **旋转模型** | R 键             | 进入旋转模式   |
+
+#### 13.4.4 模型交互（编辑模式）
 
 **前提**：需先选中模型（编辑模式下左键单击）。
 
@@ -1544,7 +1669,7 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
 | **取消选择** | ESC      | 取消选中，恢复原色 | -            |
 | **删除**     | Delete   | 删除选中实体       | -            |
 
-#### 13.4.4 放置模式操作
+#### 13.4.5 放置模式操作
 
 | 操作           | 鼠标按键 | 行为             |
 | -------------- | -------- | ---------------- |
@@ -1552,9 +1677,76 @@ LSH 交互协议定义了 3D 视图中的标准交互方式，遵循以下原则
 | **放置** | 左键单击 | 确认放置位置     |
 | **取消** | ESC      | 取消放置模式     |
 
-### 13.5 坐标系与旋转方向
+### 13.5 交互控制器实现规范
 
-#### 13.5.1 坐标系定义
+#### 13.5.1 架构设计
+
+交互控制器应与渲染引擎解耦，提供统一的交互行为查询接口：
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    InteractionController                     │
+├─────────────────────────────────────────────────────────────┤
+│  配置加载：从 config/interaction.json 加载当前模式          │
+│  行为查询：should_select_on_left_click() 等                 │
+│  状态管理：鼠标状态、拖拽状态、相机状态                      │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                    渲染引擎适配层                            │
+├─────────────────────────────────────────────────────────────┤
+│  VTK 3D View    │  Godot 3D View    │  Three.js View        │
+│  查询控制器接口  │  查询控制器接口    │  查询控制器接口        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+#### 13.5.2 核心接口
+
+```python
+class InteractionController:
+    def should_select_on_left_click(self) -> bool:
+        """左键单击是否用于选择模型"""
+        
+    def should_rotate_on_left_drag(self) -> bool:
+        """左键拖动是否用于旋转视图"""
+        
+    def should_rotate_on_middle_drag(self) -> bool:
+        """中键拖动是否用于旋转视图"""
+        
+    def should_pan_on_right_drag(self) -> bool:
+        """右键拖动是否用于平移视图"""
+        
+    def should_move_on_left_drag(self) -> bool:
+        """左键拖动是否用于移动模型"""
+        
+    def get_bindings(self) -> InteractionBindings:
+        """获取当前模式的交互绑定配置"""
+```
+
+#### 13.5.3 使用示例
+
+```python
+# VTK 视图中使用交互控制器
+def _on_left_button_press(self, obj, event):
+    x, y = self._interactor.GetEventPosition()
+    self._interaction_controller.start_mouse_press((x, y))
+    
+    if self._interaction_controller.should_rotate_on_left_drag():
+        self._interaction_controller.start_camera_rotate()
+
+def _on_left_button_release(self, obj, event):
+    was_dragging = self._interaction_controller.end_mouse_press()
+    
+    if self._interaction_controller.should_rotate_on_left_drag():
+        self._interaction_controller.end_camera_rotate()
+    elif not was_dragging and self._interaction_controller.should_select_on_left_click():
+        self._try_pick_element()
+```
+
+### 13.6 坐标系与旋转方向
+
+#### 13.6.1 坐标系定义
 
 LSH 协议采用**右手坐标系**（建筑/BIM 风格，详见第 6 章）：
 
@@ -1576,7 +1768,7 @@ Y (深度/depth，向前)
 | **Y** | 向前   | 深度方向 | depth (深度)  |
 | **Z** | 向上   | 高度方向 | height (高度) |
 
-#### 13.5.2 旋转中心约定
+#### 13.6.2 旋转中心约定
 
 **重要说明**：采用 **SolidWorks 模型旋转视角**，用户看到的是"模型在旋转"，而非"相机在旋转"。
 
@@ -1627,7 +1819,7 @@ camera.Elevation(dy * factor)
 | **模型旋转（SolidWorks）** | 模型向右旋转 | 浮动（鼠标位置） | 用户感觉模型在动 |
 | **相机旋转（VTK 默认）**   | 场景向左旋转 | 固定（场景原点） | 用户感觉视角在动 |
 
-#### 13.5.3 实体旋转约定
+#### 13.6.3 实体旋转约定
 
 | 操作               | 方向       | 角度变化 |
 | ------------------ | ---------- | -------- |
@@ -1756,6 +1948,7 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                  |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2.6.1 | 2026-03-06 | **事件源标记与建筑语义**：新增事件源标记 (`source_id`) 防止视图同步循环；明确位置信息的建筑语义定义（位置表示底面中心），规范渲染引擎坐标转换；完善事件溯源架构 |
 | 2.6.0 | 2026-03-06 | **事件溯源架构**：定义事件溯源接口，支持时间旅行和状态回滚；新增 EventSourcingManager 管理器；完善路径规划适配新 LSH 架构 |
 | 2.5.0 | 2026-03-04 | **分层架构设计**：新增分层架构设计章节，定义 Model/ActorFactory/View 三层分离架构；确立"数据与渲染彻底分离"核心理念；明确层级职责、设计原则、禁止行为；口诀"Model定长相，Factory转演员，Render只管上场" |
 | 2.4.0 | 2026-03-04 | **内外坐标系分离架构**：新增架构规范章节，明确"输入数据使用LSH、输出数据使用LSH、内部渲染层转换"原则；定义架构规则、实现示例、禁止行为；确保系统对外统一使用LSH坐标系，内部渲染层透明转换 |
