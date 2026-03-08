@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lsh-protocol"
-version = "2.6.1"
-description = "Li Shi Hang View Synchronization Protocol - A protocol for virtual world view synchronization"
+version = "3.0.1"
+description = "Li Shi Hang Protocol - A virtual-reality bridging protocol for unified element modeling"
 readme = "README.md"
 license = {text = "MIT"}
 authors = [

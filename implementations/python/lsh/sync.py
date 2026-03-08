@@ -7,6 +7,13 @@ Defines the synchronization mechanism for the LSH protocol:
 - SizeData: Size data structure
 - ViewSyncEvent: Event data structure
 - ViewSyncManager: Synchronization manager
+
+LSH Protocol v3.0 - 虚拟与现实对接
+- LSH is a virtual-reality bridging protocol
+- 万物皆元素: Everything (virtual/real) is an element
+- Removed ElementType distinction
+- All elements use category for classification
+- target_type now stores category string
 """
 
 from enum import Enum
@@ -15,55 +22,49 @@ from dataclasses import dataclass, field
 import logging
 
 if TYPE_CHECKING:
-    from .core import SceneElement, ElementType
+    from .core import SceneElement
 
 logger = logging.getLogger(__name__)
 
-LSH_PROTOCOL_VERSION = "2.6.1"
+LSH_PROTOCOL_VERSION = "3.0.1"
 
 
 class ViewSyncEvents(Enum):
     """View synchronization event types
     
-    LSH Protocol v2.6.1 - Unified element events with source marking
+    LSH Protocol v3.0 - 虚拟与现实对接
     
     Design principles:
-    1. Unified element events: All scene elements use ELEMENT_* events
-    2. Distinguished by element_type: SPACE or ENTITY
-    3. Distinguished by category: room/device/furniture/robot...
-    4. Hierarchy: Managed through parent_id/children_ids
-    5. Cascade updates: Children auto-update when parent moves
+    1. 万物皆元素: All elements (virtual/real) use ELEMENT_* events
+    2. Distinguished by category: room/device/furniture/robot...
+    3. Hierarchy: Managed through parent_id/children_ids
+    4. Cascade updates: Children auto-update when parent moves
     """
     
-    # === Unified element events ===
     ELEMENT_ADDED = "element_added"
     ELEMENT_DELETED = "element_deleted"
     ELEMENT_CHANGED = "element_changed"
     ELEMENT_POSITION_CHANGED = "element_position_changed"
     ELEMENT_VISIBILITY_CHANGED = "element_visibility_changed"
     ELEMENT_HIERARCHY_CHANGED = "element_hierarchy_changed"
+    ELEMENT_ROOM_CHANGED = "element_room_changed"
     ELEMENTS_SYNC = "elements_sync"
     
-    # === Scene events ===
     SCENE_ACTIVATED = "scene_activated"
     SCENE_CHANGED = "scene_changed"
     SCENE_BOUNDS_CHANGED = "scene_bounds_changed"
     
-    # === Edit mode events ===
     EDIT_MODE_CHANGED = "edit_mode_changed"
     
-    # === Path planning events ===
     PATH_CALCULATED = "path_calculated"
     PATH_VISUALIZED = "path_visualized"
     PATH_EXECUTED = "path_executed"
     NAVIGATION_MAP_UPDATED = "navigation_map_updated"
     
-    # === Model template events ===
     MODEL_TEMPLATE_ADDED = "model_template_added"
     MODEL_TEMPLATE_UPDATED = "model_template_updated"
     MODEL_TEMPLATE_REMOVED = "model_template_removed"
     
-    # === Global events ===
     LAYOUT_LOADED = "layout_loaded"
     LAYOUT_CHANGED = "layout_changed"
     LAYOUT_CENTERED = "layout_centered"
@@ -132,7 +133,7 @@ class SizeData:
 class ViewSyncEvent:
     """View synchronization event data structure
     
-    LSH Protocol v2.6.1 - Added source field for loop prevention
+    LSH Protocol v3.0 - target_type stores category string
     """
     event_type: ViewSyncEvents
     target_id: str
@@ -168,14 +169,11 @@ class ViewSyncManager:
     Manages synchronization across all views using publish-subscribe pattern.
     
     Usage:
-        # Get singleton
         view_sync = ViewSyncManager.instance()
         
-        # Publish element events
         view_sync.publish_element_added(element)
-        view_sync.publish_element_position_changed(id, type, x, y, z)
+        view_sync.publish_element_position_changed(id, category, x, y, z)
         
-        # Subscribe to events
         view_sync.subscribe(ViewSyncEvents.ELEMENT_ADDED, callback)
     """
     
@@ -274,8 +272,6 @@ class ViewSyncManager:
         """Disable synchronization (for batch scene updates)"""
         self._enabled = False
     
-    # === Unified element events ===
-    
     def publish_element_added(self, element: 'SceneElement'):
         """Publish element added event
         
@@ -285,9 +281,9 @@ class ViewSyncManager:
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_ADDED,
             target_id=element.id,
-            target_type=element.element_type.value,
-            position=PositionData.from_tuple(element.position),
-            size=SizeData.from_tuple(element.size) if element.size else None,
+            target_type=element.category,
+            position=PositionData.from_tuple(tuple(element.position) if isinstance(element.position, list) else element.position),
+            size=SizeData.from_tuple(tuple(element.size) if isinstance(element.size, list) else element.size) if element.size else None,
             parent_id=element.parent_id,
             extra={
                 "name": element.name,
@@ -300,19 +296,19 @@ class ViewSyncManager:
             }
         ))
     
-    def publish_element_deleted(self, element_id: str, element_type: 'ElementType',
+    def publish_element_deleted(self, element_id: str, category: str = "",
                                  extra: dict = None):
         """Publish element deleted event
         
         Args:
             element_id: Element ID
-            element_type: Element type (SPACE or ENTITY)
+            category: Element category
             extra: Extra information
         """
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_DELETED,
             target_id=element_id,
-            target_type=element_type.value if hasattr(element_type, 'value') else str(element_type),
+            target_type=category,
             extra=extra or {}
         ))
     
@@ -326,9 +322,9 @@ class ViewSyncManager:
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_CHANGED,
             target_id=element.id,
-            target_type=element.element_type.value,
-            position=PositionData.from_tuple(element.position),
-            size=SizeData.from_tuple(element.size) if element.size else None,
+            target_type=element.category,
+            position=PositionData.from_tuple(tuple(element.position) if isinstance(element.position, list) else element.position),
+            size=SizeData.from_tuple(tuple(element.size) if isinstance(element.size, list) else element.size) if element.size else None,
             parent_id=element.parent_id,
             extra={
                 "name": element.name,
@@ -339,58 +335,78 @@ class ViewSyncManager:
             }
         ))
     
-    def publish_element_position_changed(self, element_id: str, element_type: 'ElementType',
+    def publish_element_position_changed(self, element_id: str, category: str,
                                           x: float, y: float, z: float = 0.0, source: str = None):
         """Publish element position changed event
         
         Args:
             element_id: Element ID
-            element_type: Element type (SPACE or ENTITY)
+            category: Element category
             x, y, z: New position
             source: Event source identifier (for loop prevention)
         """
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_POSITION_CHANGED,
             target_id=element_id,
-            target_type=element_type.value if hasattr(element_type, 'value') else str(element_type),
+            target_type=category,
             position=PositionData(x, y, z),
             source=source
         ))
     
-    def publish_element_visibility_changed(self, element_id: str, element_type: 'ElementType',
+    def publish_element_visibility_changed(self, element_id: str, category: str,
                                             visible: bool):
         """Publish element visibility changed event
         
         Args:
             element_id: Element ID
-            element_type: Element type (SPACE or ENTITY)
+            category: Element category
             visible: Visibility
         """
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_VISIBILITY_CHANGED,
             target_id=element_id,
-            target_type=element_type.value if hasattr(element_type, 'value') else str(element_type),
+            target_type=category,
             extra={"visible": visible}
         ))
     
-    def publish_element_hierarchy_changed(self, element_id: str, element_type: 'ElementType',
+    def publish_element_hierarchy_changed(self, element_id: str, category: str,
                                            old_parent_id: str = None, new_parent_id: str = None):
         """Publish element hierarchy changed event
         
         Args:
             element_id: Element ID
-            element_type: Element type (SPACE or ENTITY)
+            category: Element category
             old_parent_id: Old parent ID
             new_parent_id: New parent ID
         """
         self.publish(ViewSyncEvent(
             event_type=ViewSyncEvents.ELEMENT_HIERARCHY_CHANGED,
             target_id=element_id,
-            target_type=element_type.value if hasattr(element_type, 'value') else str(element_type),
+            target_type=category,
             parent_id=new_parent_id,
             extra={
                 "old_parent_id": old_parent_id,
                 "new_parent_id": new_parent_id
+            }
+        ))
+    
+    def publish_element_room_changed(self, element_id: str, category: str,
+                                      old_room_id: str = None, new_room_id: str = None):
+        """Publish element room changed event
+        
+        Args:
+            element_id: Element ID
+            category: Element category
+            old_room_id: Old room ID
+            new_room_id: New room ID
+        """
+        self.publish(ViewSyncEvent(
+            event_type=ViewSyncEvents.ELEMENT_ROOM_CHANGED,
+            target_id=element_id,
+            target_type=category,
+            extra={
+                "old_room_id": old_room_id,
+                "new_room_id": new_room_id
             }
         ))
     
@@ -409,8 +425,6 @@ class ViewSyncManager:
                 "count": len(elements)
             }
         ))
-    
-    # === Global events ===
     
     def publish_full_refresh(self):
         """Publish full refresh event"""
@@ -482,7 +496,7 @@ class ViewSyncManager:
             event_type=ViewSyncEvents.EDIT_MODE_CHANGED,
             target_id="",
             target_type="layout",
-            extra={"enabled": enabled}
+            extra={"is_edit": enabled}
         ))
     
     def publish_scene_activated(self, scene_id: str):
@@ -492,8 +506,6 @@ class ViewSyncManager:
             target_id=scene_id,
             target_type="scene"
         ))
-    
-    # === Path planning events ===
     
     def publish_path_calculated(self, path: List, distance: float,
                                  estimated_time: float, waypoints: List = None):
@@ -557,8 +569,6 @@ class ViewSyncManager:
                 "message": message
             }
         ))
-    
-    # === Model template events ===
     
     def publish_model_template_added(self, template_id: str, template_data: Dict):
         """Publish model template added event"""

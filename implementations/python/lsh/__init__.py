@@ -1,15 +1,21 @@
 """
 LSH Protocol - Python Implementation
 
-Li Shi Hang View Synchronization Protocol
-A protocol for virtual world view synchronization.
+Li Shi Hang Protocol v3.0
+A virtual-reality bridging protocol for unified element modeling.
+
+Design Philosophy:
+- LSH is a virtual-reality bridging protocol
+- 万物皆元素: Everything (virtual/real) is an element
+- 万物皆可包含: Everything can contain children
+- Differences expressed through properties (category, extra)
 """
 
 
 from .core import (
-    ElementType,
     HierarchyPolicy,
     Bounds,
+    CATEGORY_DEFAULTS,
     SceneElement,
     SceneElementRegistry,
 )
@@ -20,24 +26,24 @@ from .sync import (
     ViewSyncEvent,
     ViewSyncManager,
     view_sync,
+    LSH_PROTOCOL_VERSION,
 )
 
-__version__ = "2.6.1"
+__version__ = "3.0.1"
 __author__ = "Li Hengbo"
 __license__ = "MIT"
 
 __all__ = [
-    # Core types
-    "ElementType",
     "HierarchyPolicy",
     "Bounds",
+    "CATEGORY_DEFAULTS",
     "SceneElement",
     "SceneElementRegistry",
-    # Sync types
     "ViewSyncEvents",
     "PositionData",
     "SizeData",
     "ViewSyncEvent",
     "ViewSyncManager",
     "view_sync",
+    "LSH_PROTOCOL_VERSION",
 ]

@@ -2,17 +2,17 @@
 
 **Li Shi Hang View Synchronization Protocol**
 
-[![Version](https://img.shields.io/badge/version-2.6.0-blue.svg)](https://github.com/your-repo/lsh-protocol)
+[![Version](https://img.shields.io/badge/version-3.0.1-blue.svg)](https://github.com/your-repo/lsh-protocol)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)]()
 
-LSH 是一种面向虚拟世界的视图同步协议，定义了空间数据的标准化表示和同步机制。
+LSH 是一种**虚拟与现实对接协议**，定义了场景数据的标准化表示和同步机制。无论是虚拟世界还是现实世界，都可以被抽象为**元素、关系、属性**三要素。
 
 ## 核心特性
 
 - **分层架构**：Model/ActorFactory/View 三层分离，数据与渲染彻底解耦
 - **位置优先**：所有事件携带位置信息，实现多视图自动同步
-- **极简类型**：仅 SPACE（空间）和 ENTITY（实体）两种核心类型
+- **万物皆元素**：统一元素模型，通过属性区分行为
 - **灵活扩展**：通过 `category` 字段实现业务分类，不绑定特定领域
 - **批量优化**：支持事件合并，避免重复刷新
 - **坐标系分离**：对外统一使用 LSH 坐标系，内部渲染层透明转换
@@ -25,8 +25,8 @@ LSH 协议采用建筑/BIM 风格的右手坐标系：
 Z ↑ (高度/height)
   │
   │     ┌─────────┐
-  │     │  空间   │
-  │     │  Space  │
+  │     │  元素   │
+  │     │Element  │
   │     └─────────┘
   │
   └──────────────────────→ X (宽度/width)
@@ -66,31 +66,27 @@ Y (深度/depth，向前)
 ## 快速开始
 
 ```python
-from lsh import SceneElement, ElementType, view_sync, ViewSyncEvents
+from lsh import SceneElement, view_sync, ViewSyncEvents
 
-# 创建空间（使用 LSH 坐标系）
-room = SceneElement.create_space(
+room = SceneElement.create_room(
     id="room_001",
     name="客厅",
-    position=(0, 0, 0),        # (右, 前, 上)
-    size=(5.0, 4.0, 2.8),      # (宽, 深, 高)
-    category="room"
+    position=(0, 0, 0),        
+    size=(5.0, 4.0, 2.8),      
+    room_type="living_room"
 )
 
-# 创建实体（使用 LSH 坐标系）
-device = SceneElement.create_entity(
+device = SceneElement.create_device(
     id="device_001",
     name="智能灯",
-    position=(2.5, 2.0, 1.5),  # (右2.5米, 前2.0米, 上1.5米)
-    category="device",
+    position=(2.5, 2.0, 1.5),  
+    device_type="light",
     parent_id="room_001"
 )
 
-# 发布事件
 view_sync.publish_element_added(room)
 view_sync.publish_element_added(device)
 
-# 订阅事件
 def on_element_added(event):
     print(f"元素添加: {event.extra['name']}")
 
@@ -101,19 +97,28 @@ view_sync.subscribe(ViewSyncEvents.ELEMENT_ADDED, on_element_added)
 
 ```
 ┌─────────────────────────────────────────────────────┐
-│                    虚拟世界                          │
+│              虚拟世界 / 现实世界                      │
 ├─────────────────────────────────────────────────────┤
-│  空间 (Space)        │ 有边界、可包含其他元素        │
-│  实体 (Entity)       │ 可交互、有行为               │
-│  关系 (Relation)     │ 层级、父子、包含              │
-│  属性 (Property)     │ 位置、旋转、缩放、可见性      │
+│  元素    │ 一切对象（虚拟/实体）        │
+│  关系   │ 层级、父子、包含              │
+│  属性  │ 位置、旋转、缩放、可见性      │
 └─────────────────────────────────────────────────────┘
 ```
+
+**万物皆元素**：场景中的所有对象都是元素，通过属性区分行为。
+
+| category | 说明 | 默认属性 |
+|----------|------|----------|
+| `room` | 房间 | is_space=True |
+| `device` | 设备 | is_toggleable=True |
+| `furniture` | 家具 | - |
+| `item` | 物品 | - |
+| `...` | 用户自定义 | 自定义 |
 
 ## 文档
 
 - [协议规范 (SPEC.md)](SPEC.md) - 完整的协议定义
-- [迁移指南](docs/migration.md) - 从 v1.x 迁移到 v2.0
+- [迁移指南](docs/migration.md) - 从 v2.x 迁移到 v3.0
 - [API 参考](docs/api.md) - 详细的 API 文档
 
 ## 应用场景
@@ -134,14 +139,11 @@ pip install lsh-protocol
 ## 开发
 
 ```bash
-# 克隆仓库
 git clone https://github.com/your-repo/lsh-protocol.git
 
-# 安装开发依赖
 cd lsh-protocol
 pip install -e ".[dev]"
 
-# 运行测试
 pytest tests/
 ```
 
@@ -157,11 +159,11 @@ pytest tests/
 
 | 版本 | 说明 |
 |------|------|
+| 3.0.1 | 代码实现完善：移除 ElementType 枚举；添加便捷方法；完善 CATEGORY_DEFAULTS |
+| 3.0.0 | 核心概念简化：移除 SPACE/ENTITY 区分，统一为 Element；属性查询机制 |
 | 2.6.0 | 事件溯源架构：定义事件溯源接口，支持时间旅行和状态回滚 |
 | 2.5.0 | 分层架构设计：Model/ActorFactory/View 三层分离，数据与渲染彻底解耦 |
 | 2.4.0 | 内外坐标系分离架构：明确"输入/输出使用LSH、内部渲染层转换"原则 |
 | 2.3.0 | 3D 引擎坐标转换规范：定义 LSH/Godot/VTK/Blender 坐标系转换规则 |
-| 2.2.0 | 路径规划增强：途径点事件、覆盖模式事件、避障配置事件 |
-| 2.1.0 | 交互协议：鼠标交互规范、坐标系与旋转方向、视觉反馈 |
 | 2.0.0 | 协议重新定位为虚拟世界通用协议；ElementType 简化为 SPACE/ENTITY |
 | 1.x | 智能家居领域协议 |

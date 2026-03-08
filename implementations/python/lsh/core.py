@@ -1,30 +1,22 @@
 """
 LSH Protocol Core Types
 
-Defines the core data structures for the LSH protocol:
-- ElementType: SPACE and ENTITY
+Defines the core data structures for the LSH protocol v3.0:
 - Bounds: Spatial boundaries
-- SceneElement: Unified scene element model
+- SceneElement: Unified element model (万物皆元素)
 - SceneElementRegistry: Element management
+
+Design Philosophy:
+- LSH is a virtual-reality bridging protocol
+- 万物皆元素: Everything (virtual/real) is an element
+- 万物皆可包含: Everything can contain children
+- Differences expressed through properties (category, extra)
 """
 
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List, Tuple
 from datetime import datetime
 from enum import Enum
-
-
-class ElementType(Enum):
-    """Element type (Protocol layer)
-    
-    LSH protocol defines only two core types:
-    - SPACE: A bounded container that can contain other elements
-    - ENTITY: An interactive object with behavior
-    
-    Business classification is achieved through the category field.
-    """
-    SPACE = "space"
-    ENTITY = "entity"
 
 
 class HierarchyPolicy(Enum):
@@ -104,26 +96,47 @@ class Bounds:
         )
 
 
+CATEGORY_DEFAULTS = {
+    "room": {"is_space": True},
+    "device": {"is_toggleable": True},
+    "furniture": {},
+    "item": {},
+    "door": {},
+    "window": {},
+    "robot": {"is_movable": True},
+    "custom_model": {"is_custom_model": True},
+    "conversation": {},
+    "message": {},
+    "knowledge_item": {},
+    "sensor": {},
+    "task": {},
+}
+
+
 @dataclass
 class SceneElement:
     """
-    Unified scene element model
+    Unified element model - 万物皆元素
     
-    All visible elements in a scene use this model for:
+    All elements (virtual/real) use this model for:
     1. Unified search
     2. Cross-view highlighting
     3. LSH synchronization
+    
+    Design Philosophy:
+    - LSH is a virtual-reality bridging protocol
+    - 万物皆元素: Everything (virtual/real) is an element
+    - 万物皆可包含: Everything can contain children
+    - Differences expressed through properties (category, extra)
     """
     id: str
     name: str
-    element_type: ElementType
     
-    position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    rotation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
+    position: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
+    rotation: List[float] = field(default_factory=lambda: [0.0, 0.0, 0.0])
     scale: float = 1.0
     
-    size: Tuple[float, float, float] = (1.0, 1.0, 1.0)
-    
+    size: List[float] = field(default_factory=lambda: [1.0, 1.0, 1.0])
     bounds: Optional[Bounds] = None
     
     parent_id: Optional[str] = None
@@ -147,44 +160,76 @@ class SceneElement:
     visible: bool = True
     searchable: bool = True
     
-    def is_space(self) -> bool:
-        """Check if this is a space type"""
-        return self.element_type == ElementType.SPACE
+    def get_property(self, key: str, default: Any = None) -> Any:
+        """Get property from element
+        
+        Priority:
+        1. extra field
+        2. CATEGORY_DEFAULTS[category]
+        """
+        if key in self.extra:
+            return self.extra[key]
+        
+        category_defaults = CATEGORY_DEFAULTS.get(self.category, {})
+        if key in category_defaults:
+            return category_defaults[key]
+        
+        return default
     
-    def is_entity(self) -> bool:
-        """Check if this is an entity type"""
-        return self.element_type == ElementType.ENTITY
+    def is_space(self) -> bool:
+        """Check if this is a space type (has spatial bounds)"""
+        return self.get_property("is_space", False)
+    
+    def is_toggleable(self) -> bool:
+        """Check if this element can be toggled"""
+        return self.get_property("is_toggleable", False)
+    
+    def is_movable(self) -> bool:
+        """Check if this element can move autonomously"""
+        return self.get_property("is_movable", False)
+    
+    def is_custom_model(self) -> bool:
+        """Check if this is a custom imported model"""
+        return self.get_property("is_custom_model", False)
+    
+    def get_extra_property(self, key: str, default: Any = None) -> Any:
+        """Get property from extra dict"""
+        return self.extra.get(key, default)
+    
+    def set_extra_property(self, key: str, value: Any):
+        """Set property in extra dict"""
+        self.extra[key] = value
     
     def get_world_position(self) -> Tuple[float, float, float]:
         """Get world coordinates (considering parent)"""
-        return self.position
+        return tuple(self.position)
     
     def get_local_position(self) -> Tuple[float, float, float]:
         """Get local coordinates relative to parent"""
         if self.parent_id:
             return self.local_position
-        return self.position
+        return tuple(self.position)
     
     def set_local_position(self, local_pos: Tuple[float, float, float], 
                            parent_pos: Tuple[float, float, float] = None):
         """Set local coordinates and update world coordinates"""
         self.local_position = local_pos
         if parent_pos:
-            self.position = (
+            self.position = [
                 parent_pos[0] + local_pos[0],
                 parent_pos[1] + local_pos[1],
                 parent_pos[2] + local_pos[2]
-            )
+            ]
     
     def update_from_parent(self, parent_position: Tuple[float, float, float],
                            parent_rotation: Tuple[float, float, float] = None):
         """Update world coordinates based on parent position"""
         if self.hierarchy_policy == HierarchyPolicy.FOLLOW_PARENT:
-            self.position = (
+            self.position = [
                 parent_position[0] + self.local_position[0],
                 parent_position[1] + self.local_position[1],
                 parent_position[2] + self.local_position[2]
-            )
+            ]
     
     def add_child(self, child_id: str):
         """Add a child element"""
@@ -210,15 +255,18 @@ class SceneElement:
         """Update bounds from size"""
         self.bounds = Bounds.from_size(
             self.size[0], self.size[1], self.size[2],
-            offset=self.position
+            offset=tuple(self.position)
         )
+    
+    def update_timestamp(self):
+        """Update timestamp"""
+        self.updated_at = datetime.now().isoformat()
     
     def to_dict(self) -> Dict[str, Any]:
         """Convert to dictionary"""
         return {
             "id": self.id,
             "name": self.name,
-            "element_type": self.element_type.value,
             "position": self.position,
             "rotation": self.rotation,
             "scale": self.scale,
@@ -248,11 +296,10 @@ class SceneElement:
         return cls(
             id=data.get("id", ""),
             name=data.get("name", ""),
-            element_type=ElementType(data.get("element_type", "entity")),
-            position=tuple(data.get("position", [0, 0, 0])),
-            rotation=tuple(data.get("rotation", [0, 0, 0])),
+            position=list(data.get("position", [0, 0, 0])),
+            rotation=list(data.get("rotation", [0, 0, 0])),
             scale=data.get("scale", 1.0),
-            size=tuple(data.get("size", [1, 1, 1])),
+            size=list(data.get("size", [1, 1, 1])),
             bounds=bounds,
             parent_id=data.get("parent_id"),
             children_ids=data.get("children_ids", []),
@@ -270,42 +317,21 @@ class SceneElement:
         )
     
     @classmethod
-    def create_space(cls, id: str, name: str,
-                     position: Tuple[float, float, float] = (0, 0, 0),
-                     size: Tuple[float, float, float] = (1, 1, 1),
-                     category: str = "space",
-                     **kwargs) -> 'SceneElement':
-        """Create a space element"""
+    def create(cls, id: str, name: str, category: str = "",
+               position: Tuple[float, float, float] = (0, 0, 0),
+               size: Tuple[float, float, float] = (1, 1, 1),
+               **kwargs) -> 'SceneElement':
+        """Create an element"""
         element = cls(
             id=id,
             name=name,
-            element_type=ElementType.SPACE,
-            position=position,
-            size=size,
+            position=list(position),
+            size=list(size),
             category=category,
             **kwargs
         )
         element.update_bounds_from_size()
         return element
-    
-    @classmethod
-    def create_entity(cls, id: str, name: str,
-                      position: Tuple[float, float, float] = (0, 0, 0),
-                      category: str = "entity",
-                      **kwargs) -> 'SceneElement':
-        """Create an entity element"""
-        return cls(
-            id=id,
-            name=name,
-            element_type=ElementType.ENTITY,
-            position=position,
-            category=category,
-            **kwargs
-        )
-    
-    def update_timestamp(self):
-        """Update timestamp"""
-        self.updated_at = datetime.now().isoformat()
 
 
 class SceneElementRegistry:
@@ -314,16 +340,12 @@ class SceneElementRegistry:
     
     Manages all scene elements with support for:
     1. Register/unregister elements
-    2. Search by type/category/tag
+    2. Search by category/tag
     3. Hierarchy management
     """
     
     def __init__(self):
         self._elements: Dict[str, SceneElement] = {}
-        self._by_type: Dict[ElementType, List[str]] = {
-            ElementType.SPACE: [],
-            ElementType.ENTITY: []
-        }
         self._by_category: Dict[str, List[str]] = {}
         self._by_parent: Dict[str, List[str]] = {}
         self._by_tag: Dict[str, List[str]] = {}
@@ -331,7 +353,6 @@ class SceneElementRegistry:
     def register(self, element: SceneElement):
         """Register an element"""
         self._elements[element.id] = element
-        self._by_type[element.element_type].append(element.id)
         
         if element.category:
             if element.category not in self._by_category:
@@ -358,9 +379,6 @@ class SceneElementRegistry:
             return None
         
         element = self._elements.pop(element_id)
-        
-        if element_id in self._by_type[element.element_type]:
-            self._by_type[element.element_type].remove(element_id)
         
         if element.category and element.category in self._by_category:
             if element_id in self._by_category[element.category]:
@@ -389,21 +407,6 @@ class SceneElementRegistry:
     def get_all(self) -> List[SceneElement]:
         """Get all elements"""
         return list(self._elements.values())
-    
-    def get_spaces(self) -> List[SceneElement]:
-        """Get all spaces"""
-        return [self._elements[eid] for eid in self._by_type[ElementType.SPACE] 
-                if eid in self._elements]
-    
-    def get_entities(self) -> List[SceneElement]:
-        """Get all entities"""
-        return [self._elements[eid] for eid in self._by_type[ElementType.ENTITY] 
-                if eid in self._elements]
-    
-    def get_by_type(self, element_type: ElementType) -> List[SceneElement]:
-        """Get elements by type"""
-        return [self._elements[eid] for eid in self._by_type[element_type] 
-                if eid in self._elements]
     
     def get_by_category(self, category: str) -> List[SceneElement]:
         """Get elements by category"""
@@ -440,7 +443,7 @@ class SceneElementRegistry:
         if not element:
             return
         
-        element.position = new_position
+        element.position = list(new_position)
         element.update_timestamp()
         
         children = self.get_children(element_id)
@@ -448,7 +451,7 @@ class SceneElementRegistry:
             if child.hierarchy_policy == HierarchyPolicy.FOLLOW_PARENT:
                 child.update_from_parent(new_position)
                 child.update_timestamp()
-                self.update_position_cascade(child.id, child.position)
+                self.update_position_cascade(child.id, tuple(child.position))
     
     def search(self, query: str, categories: List[str] = None,
                tags: List[str] = None) -> List[SceneElement]:
@@ -494,10 +497,6 @@ class SceneElementRegistry:
     def clear(self):
         """Clear all elements"""
         self._elements.clear()
-        self._by_type = {
-            ElementType.SPACE: [],
-            ElementType.ENTITY: []
-        }
         self._by_category.clear()
         self._by_parent.clear()
         self._by_tag.clear()
@@ -505,10 +504,6 @@ class SceneElementRegistry:
     def count(self) -> int:
         """Get total element count"""
         return len(self._elements)
-    
-    def count_by_type(self) -> Dict[ElementType, int]:
-        """Count elements by type"""
-        return {t: len(ids) for t, ids in self._by_type.items()}
     
     def count_by_category(self) -> Dict[str, int]:
         """Count elements by category"""
