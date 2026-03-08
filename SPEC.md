@@ -4,7 +4,7 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 3.0.1              |
+| 版本   | 3.0.2              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
 | 日期   | 2026-03-08         |
@@ -201,7 +201,56 @@ element.is_movable()      # 是否可自主移动
 element.is_custom_model() # 是否为自定义模型
 ```
 
-### 3.9 扩展示例
+### 3.9 属性定义系统
+
+**核心原则**：元素的编辑和展示应基于属性定义系统，避免硬编码。
+
+| 规范 | 说明 |
+|------|------|
+| 类型来源 | 从 `element.category` 自动获取，不作为参数传入 |
+| 属性定义 | 在 `ELEMENT_PROPERTY_DEFINITIONS` 中配置 |
+| 扩展新类型 | 只需添加属性定义配置，无需修改 UI 代码 |
+
+**属性定义结构**：
+
+```python
+@dataclass
+class PropertyDefinition:
+    key: str                    # 属性键
+    display_name: str           # 显示名称
+    property_type: PropertyType # 类型（TEXT, NUMBER, SELECT, COORDINATES 等）
+    editable: bool = True       # 是否可编辑
+    visible: bool = True        # 是否显示
+    required: bool = False      # 是否必填
+    default: Any = None         # 默认值
+    unit: str = ""              # 单位
+    # ... 其他配置
+
+ELEMENT_PROPERTY_DEFINITIONS = {
+    "device": {
+        "base_properties": [...],      # 基础属性（name, type 等）
+        "extra_properties": [...],     # 扩展属性（brand, model 等）
+        "position_properties": [...],  # 位置属性（position, size 等）
+        "display_order": ["name", "type", ...],  # 显示顺序
+    },
+    "furniture": {...},
+    "item": {...},
+    "room": {...},
+}
+```
+
+**使用方式**：
+
+```python
+# 编辑对话框 - 自动从 element.category 获取类型
+dialog = ElementEditDialog(parent, element, viewmodel)
+
+# 详情展示 - 自动从 element.category 获取类型
+display = ElementDetailDisplay(element, viewmodel)
+text = display.get_display_text()
+```
+
+### 3.11 扩展示例
 
 ```python
 # 普通 ball：使用默认配置
@@ -211,7 +260,7 @@ ball = SceneElement(id="ball_001", category="ball", extra={"can_pick_up": True})
 earth = SceneElement(id="earth_001", category="ball", extra={"can_pick_up": False})
 ```
 
-### 3.10 业务分类
+### 3.12 业务分类
 业务类型通过 `category` 字段实现，用户可自定义：
 
 | category | 说明 | 默认属性 |
@@ -1901,6 +1950,7 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                  |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.0.2 | 2026-03-08 | **属性定义系统**：新增 `ELEMENT_PROPERTY_DEFINITIONS` 配置，支持声明式定义元素属性（编辑、展示、类型）；新增 `PropertyDefinition` 数据类；规范类型判断应从 `element.category` 自动获取，不作为参数传入 |
 | 3.0.1 | 2026-03-08 | **协议定位升级**：从"视图同步协议"升级为"虚拟现实统一协议"；完善 CATEGORY_DEFAULTS 配置；添加 `is_space()`、`is_toggleable()`、`is_movable()`、`is_custom_model()` 便捷方法；更新所有方法签名为 `category: str` |
 | 3.0.0 | 2026-03-07 | **核心概念简化**：从四要素（空间、实体、关系、属性）简化为三要素（元素、关系、属性）；移除 SPACE/ENTITY 类型区分，统一为 Element；新增属性查询机制（category 默认配置 + extra 覆盖） |
 | 2.6.0 | 2026-03-06 | **事件溯源架构**：定义事件溯源接口，支持时间旅行和状态回滚；新增 EventSourcingManager 管理器；完善路径规划适配新 LSH 架构 |
