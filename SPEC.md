@@ -4,10 +4,10 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 3.0.2              |
+| 版本   | 3.1.0              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
-| 日期   | 2026-03-08         |
+| 日期   | 2026-03-10         |
 | 许可证 | MIT                |
 
 ---
@@ -170,18 +170,31 @@ LSH 协议将虚拟世界和现实世界统一抽象为三个核心要素：
 ```python
 # category 默认配置
 CATEGORY_DEFAULTS = {
-    "room": {"is_space": True},
+    # Home3D 模块 - 空间与实体
+    "home": {"is_space": True, "defines_coords": True},
+    "floor": {"is_space": True, "parent_category": "home"},
+    "room": {"is_space": True, "has_bounds": True},
     "device": {"is_toggleable": True},
     "furniture": {},
     "item": {},
     "door": {},
     "window": {},
-    "robot": {"is_movable": True},
-    "custom_model": {"is_custom_model": True},
-    "conversation": {},
-    "message": {},
-    "knowledge_item": {},
     "sensor": {},
+    "custom_model": {"is_custom_model": True},
+    
+    # Multimodal 模块 - AI 智能体
+    "ai_model": {"is_ai": True, "is_interactive": True, "is_virtual": True},
+    "ai_conversation": {"is_container": True, "is_virtual": True},
+    "ai_message": {"is_virtual": True},
+    "knowledge_item": {"is_virtual": True},
+    
+    # Robot 模块 - 具身智能
+    "robot": {"is_movable": True, "is_ai": True},
+    "quadruped_robot": {"parent_category": "robot"},
+    "robot_task": {"is_virtual": True},
+    "robot_experience": {"is_virtual": True},
+    
+    # 通用扩展
     "task": {},
 }
 
@@ -263,20 +276,53 @@ earth = SceneElement(id="earth_001", category="ball", extra={"can_pick_up": Fals
 ### 3.12 业务分类
 业务类型通过 `category` 字段实现，用户可自定义：
 
+#### 3.12.1 Home3D 模块 - 空间与实体
+
 | category | 说明 | 默认属性 |
 |----------|------|----------|
-| `room` | 房间 | is_space=True |
+| `home` | 家庭 | is_space=True, defines_coords=True |
+| `floor` | 楼层 | is_space=True, parent_category=home |
+| `room` | 房间 | is_space=True, has_bounds=True |
 | `device` | 设备 | is_toggleable=True |
 | `furniture` | 家具 | - |
 | `item` | 物品 | - |
 | `door` | 门 | - |
 | `window` | 窗户 | - |
-| `robot` | 机器人 | is_movable=True |
-| `custom_model` | 自定义模型 | is_custom_model=True |
-| `conversation` | 对话 | - |
-| `message` | 消息 | - |
-| `knowledge_item` | 知识条目 | - |
 | `sensor` | 传感器 | - |
+| `custom_model` | 自定义模型 | is_custom_model=True |
+
+#### 3.12.2 Multimodal 模块 - AI 智能体
+
+| category | 说明 | 默认属性 |
+|----------|------|----------|
+| `ai_model` | AI 模型实例 | is_ai=True, is_interactive=True, is_virtual=True |
+| `ai_conversation` | 对话会话 | is_container=True, is_virtual=True |
+| `ai_message` | 对话消息 | is_virtual=True |
+| `knowledge_item` | 知识条目 | is_virtual=True |
+
+**AI 模型作为元素的价值**：
+- AI 可控制设备（如"打开客厅灯"）
+- 对话发生在特定房间（位置追溯）
+- 知识条目关联空间（场景化知识）
+
+#### 3.12.3 Robot 模块 - 具身智能
+
+| category | 说明 | 默认属性 |
+|----------|------|----------|
+| `robot` | 机器人实体 | is_movable=True, is_ai=True |
+| `quadruped_robot` | 四足机器人 | parent_category=robot |
+| `robot_task` | 机器人任务 | is_virtual=True |
+| `robot_experience` | 机器人经验 | is_virtual=True |
+
+**机器人作为元素的价值**：
+- 机器人位置实时同步
+- 任务关联空间位置
+- 经验积累与空间关联
+
+#### 3.12.4 通用扩展
+
+| category | 说明 | 默认属性 |
+|----------|------|----------|
 | `task` | 任务 | - |
 | `...` | 用户自定义 | 自定义 |
 
@@ -1950,6 +1996,7 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                  |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1.0 | 2026-03-10 | **三大模块统一**：Home3D/Multimodal/Robot 三模块统一遵循"万物皆为元素"原则；新增 AI 智能体元素类型（ai_model, ai_conversation, ai_message）；新增机器人元素类型（robot, robot_task, robot_experience）；完善元素分类体系，按模块组织 |
 | 3.0.2 | 2026-03-08 | **属性定义系统**：新增 `ELEMENT_PROPERTY_DEFINITIONS` 配置，支持声明式定义元素属性（编辑、展示、类型）；新增 `PropertyDefinition` 数据类；规范类型判断应从 `element.category` 自动获取，不作为参数传入 |
 | 3.0.1 | 2026-03-08 | **协议定位升级**：从"视图同步协议"升级为"虚拟现实统一协议"；完善 CATEGORY_DEFAULTS 配置；添加 `is_space()`、`is_toggleable()`、`is_movable()`、`is_custom_model()` 便捷方法；更新所有方法签名为 `category: str` |
 | 3.0.0 | 2026-03-07 | **核心概念简化**：从四要素（空间、实体、关系、属性）简化为三要素（元素、关系、属性）；移除 SPACE/ENTITY 类型区分，统一为 Element；新增属性查询机制（category 默认配置 + extra 覆盖） |
@@ -1966,15 +2013,17 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 ## 15. 未来规划 (Roadmap)
 
-### 15.1 v3.1.0 计划
+### 15.1 v3.2.0 计划
 
 - [ ] **跨语言 SDK**：JavaScript/TypeScript 支持
 - [ ] **现实世界适配器**：IoT 设备、传感器数据接入
+- [ ] **AI 元素交互**：AI 模型与设备元素联动
 
-### 15.2 v3.2.0 计划
+### 15.2 v3.3.0 计划
 
 - [ ] **性能优化**：大规模场景渲染优化
 - [ ] **持久化层**：元素状态存储与恢复
+- [ ] **机器人经验学习**：基于空间的经验积累
 
 ### 15.3 v4.0.0 愿景
 
@@ -1982,6 +2031,7 @@ def drag_element(self, screen_x: float, screen_y: float):
 - [ ] **冲突解决**：CRDT 集成，支持多人协作
 - [ ] **标准化**：提交为开放标准
 - [ ] **生态建设**：支持 Unity、Unreal Engine
+- [ ] **具身智能**：AI + 机器人 + 空间深度融合
 
 ---
 
