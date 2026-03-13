@@ -17,7 +17,7 @@ LSH Protocol v3.0 - 虚拟与现实对接
 """
 
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, TYPE_CHECKING
+from typing import Any, Callable, Dict, List, Optional, Tuple, TYPE_CHECKING
 from dataclasses import dataclass, field
 import logging
 
@@ -59,11 +59,14 @@ class ViewSyncEvents(Enum):
     PATH_CALCULATED = "path_calculated"
     PATH_VISUALIZED = "path_visualized"
     PATH_EXECUTED = "path_executed"
+    PATH_START_SELECTED = "path_start_selected"
+    PATH_END_SELECTED = "path_end_selected"
+    PATH_WAYPOINT_ADDED = "path_waypoint_added"
+    PATH_SELECTION_MODE_CHANGED = "path_selection_mode_changed"
+    PATH_SELECTION_CLEARED = "path_selection_cleared"
+    PATH_COVERAGE_PROGRESS = "path_coverage_progress"
+    PATH_COVERAGE_COMPLETED = "path_coverage_completed"
     NAVIGATION_MAP_UPDATED = "navigation_map_updated"
-    
-    MODEL_TEMPLATE_ADDED = "model_template_added"
-    MODEL_TEMPLATE_UPDATED = "model_template_updated"
-    MODEL_TEMPLATE_REMOVED = "model_template_removed"
     
     LAYOUT_LOADED = "layout_loaded"
     LAYOUT_CHANGED = "layout_changed"
@@ -84,6 +87,9 @@ class PositionData:
     
     def to_dict(self) -> Dict[str, float]:
         return {"x": self.x, "y": self.y, "z": self.z}
+    
+    def to_tuple(self) -> Tuple[float, float, float]:
+        return (self.x, self.y, self.z)
     
     @classmethod
     def from_dict(cls, data: Dict) -> 'PositionData':
@@ -111,6 +117,9 @@ class SizeData:
     
     def to_dict(self) -> Dict[str, float]:
         return {"width": self.width, "depth": self.depth, "height": self.height}
+    
+    def to_tuple(self) -> Tuple[float, float, float]:
+        return (self.width, self.depth, self.height)
     
     @classmethod
     def from_dict(cls, data: Dict) -> 'SizeData':
@@ -570,30 +579,17 @@ class ViewSyncManager:
             }
         ))
     
-    def publish_model_template_added(self, template_id: str, template_data: Dict):
-        """Publish model template added event"""
+    def publish_path_selection_mode_changed(self, mode: str):
+        """Publish path selection mode changed event
+        
+        Args:
+            mode: Selection mode ("start", "end", "waypoint", or "" to clear)
+        """
         self.publish(ViewSyncEvent(
-            event_type=ViewSyncEvents.MODEL_TEMPLATE_ADDED,
-            target_id=template_id,
-            target_type="model_template",
-            extra=template_data
-        ))
-    
-    def publish_model_template_updated(self, template_id: str, template_data: Dict):
-        """Publish model template updated event"""
-        self.publish(ViewSyncEvent(
-            event_type=ViewSyncEvents.MODEL_TEMPLATE_UPDATED,
-            target_id=template_id,
-            target_type="model_template",
-            extra=template_data
-        ))
-    
-    def publish_model_template_removed(self, template_id: str):
-        """Publish model template removed event"""
-        self.publish(ViewSyncEvent(
-            event_type=ViewSyncEvents.MODEL_TEMPLATE_REMOVED,
-            target_id=template_id,
-            target_type="model_template"
+            event_type=ViewSyncEvents.PATH_SELECTION_MODE_CHANGED,
+            target_id="",
+            target_type="path",
+            extra={"mode": mode}
         ))
 
 

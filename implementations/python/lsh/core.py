@@ -110,7 +110,84 @@ CATEGORY_DEFAULTS = {
     "knowledge_item": {},
     "sensor": {},
     "task": {},
+    "ai_model": {"is_ai": True, "is_virtual": True},
+    "ai_conversation": {"is_virtual": True},
 }
+
+
+def register_category(category: str, config: Dict[str, Any]) -> None:
+    """注册元素类型配置
+    
+    Args:
+        category: 元素类型名称
+        config: 配置字典，可包含：
+            - is_space: 是否是空间类型
+            - is_toggleable: 是否可切换状态
+            - is_movable: 是否可移动
+            - is_virtual: 是否是虚拟元素
+            - is_ai: 是否是 AI 元素
+            - parent_category: 父类型（继承父类型的属性）
+            - 其他自定义属性...
+    """
+    if "parent_category" in config:
+        parent = config["parent_category"]
+        if parent in CATEGORY_DEFAULTS:
+            merged = CATEGORY_DEFAULTS[parent].copy()
+            merged.update(config)
+            config = merged
+    CATEGORY_DEFAULTS[category] = config
+
+
+def get_category_config(category: str) -> Dict[str, Any]:
+    """获取元素类型配置
+    
+    Args:
+        category: 元素类型名称
+        
+    Returns:
+        配置字典
+    """
+    return CATEGORY_DEFAULTS.get(category, {})
+
+
+def get_category_property(category: str, key: str, default: Any = None) -> Any:
+    """获取元素类型的特定属性
+    
+    Args:
+        category: 元素类型名称
+        key: 属性键名
+        default: 默认值
+        
+    Returns:
+        属性值
+    """
+    config = CATEGORY_DEFAULTS.get(category, {})
+    return config.get(key, default)
+
+
+def get_all_categories() -> List[str]:
+    """获取所有已注册的元素类型
+    
+    Returns:
+        元素类型名称列表
+    """
+    return list(CATEGORY_DEFAULTS.keys())
+
+
+def get_categories_by_property(key: str, value: Any = True) -> List[str]:
+    """根据属性值获取元素类型列表
+    
+    Args:
+        key: 属性键名
+        value: 属性值（默认为 True）
+        
+    Returns:
+        匹配的元素类型列表
+    """
+    return [
+        category for category, config in CATEGORY_DEFAULTS.items()
+        if config.get(key) == value
+    ]
 
 
 @dataclass
@@ -146,8 +223,6 @@ class SceneElement:
     
     local_position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     local_rotation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    
-    template_id: Optional[str] = None
     
     category: str = ""
     tags: List[str] = field(default_factory=list)
@@ -199,6 +274,33 @@ class SceneElement:
     def set_extra_property(self, key: str, value: Any):
         """Set property in extra dict"""
         self.extra[key] = value
+    
+    def apply_action(self, action: str, value: Any = None):
+        """Apply an action to this element
+        
+        Args:
+            action: Action name (e.g., 'turn_on', 'turn_off', 'toggle')
+            value: Optional action value
+        """
+        if action == "toggle":
+            current_state = self.extra.get("state", "off")
+            self.extra["state"] = "on" if current_state == "off" else "off"
+        elif action in ("turn_on", "on"):
+            self.extra["state"] = "on"
+        elif action in ("turn_off", "off"):
+            self.extra["state"] = "off"
+        elif action == "set_value" and value is not None:
+            if isinstance(value, dict):
+                for k, v in value.items():
+                    self.extra[k] = v
+            else:
+                self.extra["value"] = value
+        else:
+            self.extra["last_action"] = action
+            if value is not None:
+                self.extra["last_action_value"] = value
+        
+        self.update_timestamp()
     
     def get_world_position(self) -> Tuple[float, float, float]:
         """Get world coordinates (considering parent)"""
@@ -277,7 +379,6 @@ class SceneElement:
             "hierarchy_policy": self.hierarchy_policy.value,
             "local_position": self.local_position,
             "local_rotation": self.local_rotation,
-            "template_id": self.template_id,
             "category": self.category,
             "tags": self.tags,
             "extra": self.extra,
@@ -306,7 +407,6 @@ class SceneElement:
             hierarchy_policy=HierarchyPolicy(data.get("hierarchy_policy", "follow_parent")),
             local_position=tuple(data.get("local_position", [0, 0, 0])),
             local_rotation=tuple(data.get("local_rotation", [0, 0, 0])),
-            template_id=data.get("template_id"),
             category=data.get("category", ""),
             tags=data.get("tags", []),
             extra=data.get("extra", {}),
@@ -332,6 +432,115 @@ class SceneElement:
         )
         element.update_bounds_from_size()
         return element
+    
+    @classmethod
+    def create_device(cls, id: str, name: str, 
+                      position: Tuple[float, float, float] = (0, 0, 0),
+                      device_type: str = "light", 
+                      state: str = "off",
+                      room_id: str = None,
+                      extra: Dict[str, Any] = None) -> 'SceneElement':
+        """Create a device element"""
+        device_extra = {"device_type": device_type, "state": state}
+        if room_id:
+            device_extra["room_id"] = room_id
+        if extra:
+            device_extra.update(extra)
+        
+        return cls(
+            id=id,
+            name=name,
+            position=list(position),
+            category="device",
+            extra=device_extra
+        )
+    
+    @classmethod
+    def create_room(cls, id: str, name: str,
+                    position: Tuple[float, float, float] = (0, 0, 0),
+                    size: Tuple[float, float, float] = (6, 5, 3),
+                    room_type: str = "living_room",
+                    extra: Dict[str, Any] = None) -> 'SceneElement':
+        """Create a room element"""
+        room_extra = {"room_type": room_type, "is_space": True}
+        if extra:
+            room_extra.update(extra)
+        
+        element = cls(
+            id=id,
+            name=name,
+            position=list(position),
+            size=list(size),
+            category="room",
+            extra=room_extra
+        )
+        element.update_bounds_from_size()
+        return element
+    
+    @classmethod
+    def create_furniture(cls, id: str, name: str,
+                         position: Tuple[float, float, float] = (0, 0, 0),
+                         size: Tuple[float, float, float] = (1, 1, 1),
+                         furniture_type: str = "sofa",
+                         room_id: str = None,
+                         extra: Dict[str, Any] = None) -> 'SceneElement':
+        """Create a furniture element"""
+        furniture_extra = {"furniture_type": furniture_type}
+        if room_id:
+            furniture_extra["room_id"] = room_id
+        if extra:
+            furniture_extra.update(extra)
+        
+        element = cls(
+            id=id,
+            name=name,
+            position=list(position),
+            size=list(size),
+            category="furniture",
+            extra=furniture_extra
+        )
+        element.update_bounds_from_size()
+        return element
+    
+    @classmethod
+    def create_item(cls, id: str, name: str,
+                    position: Tuple[float, float, float] = (0, 0, 0),
+                    item_type: str = "electronics",
+                    room_id: str = None,
+                    extra: Dict[str, Any] = None) -> 'SceneElement':
+        """Create an item element"""
+        item_extra = {"item_type": item_type}
+        if room_id:
+            item_extra["room_id"] = room_id
+        if extra:
+            item_extra.update(extra)
+        
+        return cls(
+            id=id,
+            name=name,
+            position=list(position),
+            category="item",
+            extra=item_extra
+        )
+    
+    @classmethod
+    def create_robot(cls, id: str, name: str,
+                     position: Tuple[float, float, float] = (0, 0, 0),
+                     robot_type: str = "quadruped",
+                     state: str = "idle",
+                     extra: Dict[str, Any] = None) -> 'SceneElement':
+        """Create a robot element"""
+        robot_extra = {"robot_type": robot_type, "state": state}
+        if extra:
+            robot_extra.update(extra)
+        
+        return cls(
+            id=id,
+            name=name,
+            position=list(position),
+            category="robot",
+            extra=robot_extra
+        )
 
 
 class SceneElementRegistry:

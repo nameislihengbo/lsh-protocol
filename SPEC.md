@@ -4,10 +4,10 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 3.1.0              |
+| 版本   | 3.1.1              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
-| 日期   | 2026-03-10         |
+| 日期   | 2026-03-12         |
 | 许可证 | MIT                |
 
 ---
@@ -1031,9 +1031,6 @@ class SceneElement:
     local_position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
     local_rotation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
   
-    # 模板引用
-    template_id: Optional[str] = None
-  
     # 标签
     tags: List[str] = field(default_factory=list)
   
@@ -1467,20 +1464,6 @@ def publish_path_visualized(self, path: List, view_type: str = "both",
 def publish_path_executed(self, path_id: str, success: bool, 
                           message: str = "") -> None:
     """发布路径执行事件"""
-    pass
-
-# === 模型模板事件 ===
-
-def publish_model_template_added(self, template_id: str, template_data: Dict) -> None:
-    """发布模型模板添加事件"""
-    pass
-
-def publish_model_template_updated(self, template_id: str, template_data: Dict) -> None:
-    """发布模型模板更新事件"""
-    pass
-
-def publish_model_template_removed(self, template_id: str) -> None:
-    """发布模型模板移除事件"""
     pass
 ```
 
@@ -1996,8 +1979,9 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                  |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 3.1.1 | 2026-03-12 | **架构改造完成**：完成 Home3D/Multimodal/Robot 三模块 LSH 协议 v3.0 改造；删除冗余文件（scene_element.py, view_sync.py, coord_transform.py, element_properties.py）；统一使用 `from lsh import` 导入；新增 category_config.py 业务类型配置；引擎模式统一（所有引擎继承 BaseEngine）；净减少 28,588 行代码 |
+| 3.1.1 | 2026-03-12 | **架构改造完成**：完成 Home3D/Multimodal/Robot 三模块 LSH 协议 v3.0 改造；删除冗余文件（scene_element.py, view_sync.py, coord_transform.py, element_properties.py）；统一使用 `from lsh import` 导入；新增 category_config.py 业务类型配置；引擎模式统一（所有引擎继承 BaseEngine）；测试框架模块化；净减少 28,588 行代码 |
 | 3.1.0 | 2026-03-10 | **三大模块统一**：Home3D/Multimodal/Robot 三模块统一遵循"万物皆为元素"原则；新增 AI 智能体元素类型（ai_model, ai_conversation, ai_message）；新增机器人元素类型（robot, robot_task, robot_experience）；完善元素分类体系，按模块组织 |
-| 3.0.2 | 2026-03-08 | **属性定义系统**：新增 `ELEMENT_PROPERTY_DEFINITIONS` 配置，支持声明式定义元素属性（编辑、展示、类型）；新增 `PropertyDefinition` 数据类；规范类型判断应从 `element.category` 自动获取，不作为参数传入 |
 | 3.0.1 | 2026-03-08 | **协议定位升级**：从"视图同步协议"升级为"虚拟现实统一协议"；完善 CATEGORY_DEFAULTS 配置；添加 `is_space()`、`is_toggleable()`、`is_movable()`、`is_custom_model()` 便捷方法；更新所有方法签名为 `category: str` |
 | 3.0.0 | 2026-03-07 | **核心概念简化**：从四要素（空间、实体、关系、属性）简化为三要素（元素、关系、属性）；移除 SPACE/ENTITY 类型区分，统一为 Element；新增属性查询机制（category 默认配置 + extra 覆盖） |
 | 2.6.0 | 2026-03-06 | **事件溯源架构**：定义事件溯源接口，支持时间旅行和状态回滚；新增 EventSourcingManager 管理器；完善路径规划适配新 LSH 架构 |
