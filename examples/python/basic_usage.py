@@ -1,96 +1,104 @@
 """
 LSH Protocol Example: Basic Usage
 
-This example demonstrates the basic usage of the LSH protocol.
+LSH 协议示例：基本用法
+
+演示 LSH 协议的核心功能：
+- 万物皆元素
+- 属性驱动
+- 无限扩展
 """
 
 from lsh import (
     SceneElement,
+    SceneElementRegistry,
     view_sync,
     ViewSyncEvents,
-    SceneElementRegistry,
 )
 
 
 def on_element_added(event):
-    """Handle element added event"""
-    category = event.extra.get("category", "")
-    print(f"[EVENT] Element added: {event.extra['name']} (category={category})")
-
-
-def on_position_changed(event):
-    """Handle position changed event"""
-    pos = event.position
-    print(f"[EVENT] Position changed: {event.target_id} -> ({pos.x}, {pos.y}, {pos.z})")
+    """处理元素添加事件"""
+    name = event.properties.get("name", "")
+    category = event.properties.get("category", "")
+    print(f"[EVENT] 元素添加: {name} (category={category})")
 
 
 def main():
     print("=" * 50)
-    print("LSH Protocol v3.0.1 - Basic Usage Example")
+    print("LSH 协议 v3.2 - 万物皆元素，属性驱动")
     print("=" * 50)
     
     view_sync.subscribe(ViewSyncEvents.ELEMENT_ADDED, on_element_added)
-    view_sync.subscribe(ViewSyncEvents.ELEMENT_POSITION_CHANGED, on_position_changed)
     
     registry = SceneElementRegistry()
     
-    print("\n1. Creating a room...")
-    room = SceneElement.create_room(
-        id="room_001",
-        name="Living Room",
-        position=(0, 0, 0),
-        size=(5.0, 4.0, 2.8),
-        room_type="living_room"
-    )
+    print("\n1. 创建空白元素...")
+    empty = SceneElement.create()
+    print(f"   空白元素 ID: {empty.id}")
+    
+    print("\n2. 创建房间...")
+    room = SceneElement.create({
+        "name": "客厅",
+        "category": "room",
+        "position": [0, 0, 0],
+        "size": [5.0, 4.0, 2.8],
+        "room_type": "living_room"
+    })
     registry.register(room)
     view_sync.publish_element_added(room)
     
-    print("\n2. Creating devices...")
-    light = SceneElement.create_device(
-        id="device_001",
-        name="Smart Light",
-        position=(2.5, 2.0, 1.5),
-        device_type="light",
-        parent_id="room_001",
-        extra={"state": "off"}
-    )
+    print("\n3. 创建设备...")
+    light = SceneElement.create({
+        "name": "智能灯",
+        "category": "device",
+        "position": [2.5, 2.0, 1.5],
+        "device_type": "light",
+        "state": "off",
+        "parent_id": room.id
+    })
     registry.register(light)
     view_sync.publish_element_added(light)
     
-    sensor = SceneElement.create_device(
-        id="device_002",
-        name="Temperature Sensor",
-        position=(1.0, 1.0, 1.0),
-        device_type="sensor",
-        parent_id="room_001",
-        extra={"temperature": 25.0}
-    )
-    registry.register(sensor)
-    view_sync.publish_element_added(sensor)
+    print("\n4. 创建家具...")
+    sofa = SceneElement.create({
+        "name": "沙发",
+        "category": "furniture",
+        "position": [4, 3, 0],
+        "size": [2.5, 1, 0.8],
+        "eng_name": "sofa",
+        "color": "#8B4513"
+    })
+    registry.register(sofa)
+    view_sync.publish_element_added(sofa)
     
-    print("\n3. Moving a device...")
-    view_sync.publish_element_position_changed(
-        "device_001", "device", 3.0, 2.5, 1.5
-    )
+    print("\n5. 创建抽象元素（磁场）...")
+    field = SceneElement.create({"name": "磁场"})
+    registry.register(field)
+    print(f"   磁场 ID: {field.id}")
     
-    print("\n4. Searching elements...")
-    results = registry.search("light", categories=["device"])
-    print(f"   Found: {[e.name for e in results]}")
+    print("\n6. 属性操作...")
+    print(f"   沙发名称: {sofa.get_property('name')}")
+    print(f"   沙发颜色: {sofa.get_property('color')}")
+    sofa.set_property("color", "red")
+    print(f"   沙发新颜色: {sofa.get_property('color')}")
     
-    print("\n5. Getting elements by category...")
-    devices = registry.get_by_category("device")
-    print(f"   Devices: {[e.name for e in devices]}")
+    print("\n7. 按属性查找...")
+    devices = registry.find_by_property("category", "device")
+    print(f"   设备: {[e.get_property('name') for e in devices]}")
     
-    print("\n6. Getting children of room_001...")
-    children = registry.get_children("room_001")
-    print(f"   Children: {[e.name for e in children]}")
+    sofas = registry.find_by_property("name", "沙发")
+    print(f"   沙发: {[e.get_property('name') for e in sofas]}")
     
-    print("\n7. Registry statistics...")
-    print(f"   Total elements: {registry.count()}")
-    print(f"   By category: {registry.count_by_category()}")
+    print("\n8. 搜索...")
+    results = registry.search("灯")
+    print(f"   搜索'灯': {[e.get_property('name') for e in results]}")
+    
+    print("\n9. 统计...")
+    print(f"   元素总数: {registry.count()}")
     
     print("\n" + "=" * 50)
-    print("Example completed!")
+    print("示例完成!")
     print("=" * 50)
 
 

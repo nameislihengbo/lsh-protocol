@@ -1,10 +1,10 @@
 # LSH 协议
 
-**Li Shi Hang Protocol - 虚拟现实统一协议**
+**Li Shi Hang Protocol - 万物皆元素，属性驱动，无限扩展**
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 3.1.2              |
+| 版本   | 3.2.0              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
 | 日期   | 2026-03-14         |
@@ -12,92 +12,95 @@
 
 ---
 
-## 1. 摘要 (Abstract)
+## 1. 摘要
 
-LSH 协议是一种**虚拟现实统一协议**，将虚拟世界和现实世界统一抽象为**元素、关系、属性**三要素，实现统一的建模、交互和同步。
+LSH 协议是一种**万物皆元素的统一协议**，将一切对象抽象为元素，通过属性驱动实现无限扩展。
 
-**核心能力**：
+**核心设计**：
 
-| 能力 | 说明 |
-|------|------|
-| **统一建模** | 虚拟/现实对象统一为元素模型 |
-| **视图同步** | 多视图数据一致性（v2.0 核心能力） |
-| **交互协议** | 标准化的用户交互规范 |
-| **坐标系统** | 统一的空间坐标定义 |
-| **事件驱动** | 发布-订阅模式的状态同步 |
-
-**v3.0.0 重大更新**：
-
-- **协议重新定位**：从"视图同步协议"升级为"虚拟现实统一协议"
-- **核心概念简化**：从四要素简化为三要素（元素、关系、属性）
-- **移除类型约束**：不再区分 SPACE/ENTITY，统一为 Element
-- **属性查询机制**：通过 category 默认配置 + extra 覆盖实现灵活扩展
+- **万物皆元素**：一切对象都是元素（设备、家具、房间、甚至"磁场"等抽象概念）
+- **属性驱动**：所有内容都通过属性表达，无类型约束
+- **无限扩展**：任意属性，无限可能
 
 ---
 
-## 2. 应用场景
+## 2. 三要素
 
-**应用场景**：
-
-| 场景层级       | 说明               | 典型应用                       |
-| -------------- | ------------------ | ------------------------------ |
-| **家庭** | 智能家居、物品管理 | 房间、设备、家具的可视化管理   |
-| **社区** | 社区管理与服务     | 门禁、停车、公共设施、环境监测 |
-| **城市** | 城市级应用         | 交通管理、城市安防、公共服务   |
-| **国家** | 跨区域协调         | 物流网络、能源调度、应急响应   |
-| **世界** | 全球虚拟世界       | 元宇宙、跨国协作、全球模拟     |
-
-**场景延伸路线**：家庭 → 社区 → 城市 → 国家 → 世界
+| 要素 | 说明 | 来源 |
+|------|------|------|
+| **元素** | 一个空白容器 | `SceneElement.create()` |
+| **关系** | ID（系统生成，用于标识） | 自动生成 |
+| **属性** | 所有内容（name, category, position 等） | 用户定义 |
 
 ---
 
-## 3. 核心概念 (Core Concepts)
+## 3. 核心概念
 
 ### 3.1 设计哲学
 
-LSH 协议遵循三大核心设计理念：
-
 | 理念 | 说明 |
 |------|------|
-| **万物互联** | 任何元素可以与任何元素建立关系，通过 `parent_id`/`children_ids`/`extra.ref_*` 实现灵活连接 |
-| **属性驱动** | 行为由属性决定，不依赖类型判断。通过 `get_property()` 查询，支持 category 默认值 + extra 覆盖 |
-| **无限扩展** | 注册新 category，建立新关系，无需修改核心代码。系统通过 `register_category()` 动态扩展 |
+| **万物皆元素** | 一切对象都是元素，包括抽象概念 |
+| **属性驱动** | 所有内容都通过属性表达，通过 `get_property()` 查询 |
+| **无限扩展** | 任意属性，无限可能 |
 
-### 3.2 虚拟现实对应
-
-LSH 协议的核心价值在于建立虚拟世界与现实世界的统一映射：
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    虚拟现实对应关系                              │
-├─────────────────────────────────────────────────────────────────┤
-│  现实世界              虚拟世界              对应方式            │
-├─────────────────────────────────────────────────────────────────┤
-│  物理设备（灯、空调）  →  虚拟元素（device）  →  id 绑定         │
-│  物理空间（房间）      →  虚拟元素（room）    →  id 绑定         │
-│  传感器数据            →  extra.sensor_*     →  属性映射         │
-│  设备状态              →  extra.state        →  属性同步         │
-│  用户操作              →  事件触发            →  双向通信         │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**对应机制**：
-
-| 机制 | 说明 | 示例 |
-|------|------|------|
-| **ID 绑定** | 虚拟元素 ID 与现实设备 ID 一一对应 | `device_001` → 现实中的智能灯 |
-| **属性映射** | 现实状态映射到虚拟属性 | `extra.state="on"` 表示灯亮 |
-| **事件同步** | 现实变化触发虚拟事件，虚拟操作驱动现实变化 | 设备状态变化 → `ELEMENT_CHANGED` |
-| **双向通信** | 虚拟操作 → 现实执行，现实变化 → 虚拟更新 | 点击开关 → 设备响应 → 状态回传 |
-
-**扩展属性约定**：
+### 3.2 使用示例
 
 ```python
-# 现实设备绑定
-extra = {
-    "real_device_id": "zigbee_001",      # 现实设备标识
-    "real_device_type": "zigbee_light",  # 现实设备类型
-    "state": "on",                        # 设备状态
+from lsh import SceneElement, SceneElementRegistry
+
+# 创建空白元素
+element = SceneElement.create()
+
+# 创建沙发
+sofa = SceneElement.create({
+    "name": "沙发",
+    "category": "furniture",
+    "position": [4, 3, 0],
+    "size": [2.5, 1, 0.8],
+    "eng_name": "sofa",
+    "color": "#8B4513"
+})
+
+# 创建设备
+light = SceneElement.create({
+    "name": "客厅灯",
+    "category": "device",
+    "position": [3, 3, 2.8],
+    "state": "off"
+})
+
+# 磁场（抽象元素）
+field = SceneElement.create({"name": "磁场"})
+
+# 属性操作
+sofa.get_property("name")           # "沙发"
+sofa.set_property("color", "red")   # 设置颜色
+
+# 注册表
+registry = SceneElementRegistry()
+registry.register(sofa)
+
+# 按属性查找
+registry.find_by_property("category", "device")  # 所有设备
+registry.find_by_property("name", "沙发")          # 名称为"沙发"的元素
+
+# 搜索
+registry.search("灯")  # 搜索包含"灯"的所有元素
+```
+
+### 3.3 常用属性
+
+| 属性 | 说明 | 示例 |
+|------|------|------|
+| `id` | 唯一标识（系统生成） | `elem_a3f8c2d1e4b5` |
+| `name` | 名称 | `"沙发"` |
+| `category` | 分类 | `"device"`, `"furniture"`, `"room"` |
+| `position` | 位置 [x, y, z] | `[4, 3, 0]` |
+| `size` | 尺寸 [w, d, h] | `[2.5, 1, 0.8]` |
+| `eng_name` | 英文名（扩展） | `"sofa"` |
+| `color` | 颜色 | `"#8B4513"` |
+| `state` | 状态 | `"on"`, `"off"` |
     "online": True,                       # 在线状态
 }
 
@@ -128,18 +131,57 @@ LSH 协议将虚拟世界和现实世界统一抽象为三个核心要素：
 
 **一切皆元素**：场景中的所有对象都是元素，通过属性区分行为。
 
-| 属性 | 类型 | 说明 |
+**LSH 三要素设计**：
+
+| 要素 | 说明 | 来源 |
 |------|------|------|
-| `id` | str | 唯一标识 |
-| `name` | str | 元素名称 |
-| `category` | str | 业务分类（room, device, furniture 等） |
-| `position` | List[float] | 位置 (x, y, z) |
-| `size` | List[float] | 尺寸 (width, depth, height) |
-| `rotation` | List[float] | 旋转 (rx, ry, rz) |
-| `parent_id` | str | 父元素 ID |
-| `children_ids` | List[str] | 子元素 ID 列表 |
-| `visible` | bool | 是否可见 |
-| `extra` | Dict | 自定义属性 |
+| **元素** | 名称（用户定义，如"沙发"） | 用户输入 |
+| **关系** | ID（系统自动生成，用于标识和建立关系） | 系统生成 |
+| **属性** | 其他所有内容（位置、大小、颜色、状态等） | 属性字典 |
+
+**创建元素示例**：
+
+```python
+# 最简单的元素 - 只有名称
+field = SceneElement.create("磁场")
+
+# 带分类的元素
+field = SceneElement.create("磁场", {"category": "field"})
+
+# 创建设备 - 名称 + 属性
+light = SceneElement.create("客厅灯", {
+    "category": "device",
+    "position": [3, 3, 2.8],
+    "size": [0.3, 0.3, 0.3],
+    "state": "off"
+})
+
+# 创建家具
+sofa = SceneElement.create("沙发", {
+    "category": "furniture",
+    "position": [4, 3, 0],
+    "size": [2.5, 1, 0.8],
+    "color": "#8B4513"
+})
+
+# ID 由系统自动生成，如: elem_a3f8c2d1e4b5
+print(sofa.id)  # elem_a3f8c2d1e4b5
+```
+
+**元素属性结构**：
+
+| 属性 | 类型 | 说明 | 来源 |
+|------|------|------|------|
+| `id` | str | 唯一标识（关系） | 系统生成 |
+| `name` | str | 元素名称（元素） | 用户定义 |
+| `category` | str | 业务分类 | 属性字典 |
+| `position` | List[float] | 位置 (x, y, z) | 属性字典 |
+| `size` | List[float] | 尺寸 (width, depth, height) | 属性字典 |
+| `rotation` | List[float] | 旋转 (rx, ry, rz) | 属性字典 |
+| `parent_id` | str | 父元素 ID | 属性字典 |
+| `children_ids` | List[str] | 子元素 ID 列表 | 系统维护 |
+| `visible` | bool | 是否可见 | 属性字典 |
+| `extra` | Dict | 自定义属性 | 属性字典 |
 
 ### 3.6 关系 (Relation)
 
@@ -153,68 +195,89 @@ LSH 协议将虚拟世界和现实世界统一抽象为三个核心要素：
 
 ### 3.7 属性 (Property)
 
-属性描述元素的所有特性：
+属性描述元素的所有特性，通过统一的属性字典传递：
 
 | 属性类别 | 属性 | 说明 |
 |----------|------|------|
-| **基础** | `id`, `name`, `category` | 标识和分类 |
+| **基础** | `category`, `tags` | 分类和标签 |
 | **空间** | `position`, `size`, `rotation` | 空间变换 |
-| **关系** | `parent_id`, `children_ids` | 层级关系 |
-| **状态** | `visible` | 运行状态 |
-| **扩展** | `extra` | 自定义属性 |
+| **关系** | `parent_id` | 层级关系 |
+| **状态** | `visible`, `state` | 运行状态 |
+| **外观** | `color`, `material` | 视觉属性 |
+| **扩展** | 其他自定义属性 | 业务扩展 |
 
-### 3.8 属性查询机制
+### 3.8 元素操作方法
 
-**默认值 + 覆盖机制**：
+**元素实例方法**（支持链式调用）：
+
+| 方法 | 说明 | 示例 |
+|------|------|------|
+| `move(position/offset)` | 移动元素 | `element.move(position=[1, 2, 0])` |
+| `resize(size)` | 调整尺寸 | `element.resize([2, 1, 0.8])` |
+| `rotate(rotation/offset)` | 旋转元素 | `element.rotate(offset=(0, 90, 0))` |
+| `set_property(key, value)` | 设置单个属性 | `element.set_property("color", "red")` |
+| `set_properties(dict)` | 批量设置属性 | `element.set_properties({"color": "red", "state": "on"})` |
+| `rename(name)` | 重命名 | `element.rename("新沙发")` |
+| `show()` / `hide()` | 显示/隐藏 | `element.hide()` |
+| `toggle_visibility()` | 切换可见性 | `element.toggle_visibility()` |
+
+**链式调用示例**：
 
 ```python
-# category 默认配置
-CATEGORY_DEFAULTS = {
-    # Home3D 模块 - 空间与实体
-    "home": {"is_space": True, "defines_coords": True},
-    "floor": {"is_space": True, "parent_category": "home"},
-    "room": {"is_space": True, "has_bounds": True},
-    "device": {"is_toggleable": True},
-    "furniture": {},
-    "item": {},
-    "door": {},
-    "window": {},
-    "sensor": {},
-    "custom_model": {"is_custom_model": True},
-    
-    # Multimodal 模块 - AI 智能体
-    "ai_model": {"is_ai": True, "is_interactive": True, "is_virtual": True},
-    "ai_conversation": {"is_container": True, "is_virtual": True},
-    "ai_message": {"is_virtual": True},
-    "knowledge_item": {"is_virtual": True},
-    
-    # Robot 模块 - 具身智能
-    "robot": {"is_movable": True, "is_ai": True},
-    "quadruped_robot": {"parent_category": "robot"},
-    "robot_task": {"is_virtual": True},
-    "robot_experience": {"is_virtual": True},
-    
-    # 通用扩展
-    "task": {},
-}
+# 创建并设置属性
+sofa = SceneElement.create("沙发", {"category": "furniture"})
+sofa.move(position=[4, 3, 0]).resize([2.5, 1, 0.8]).set_property("color", "#8B4513")
 
-def get_property(element, key, default=None):
-    """获取属性：优先 extra，其次 category 默认值"""
-    if key in element.extra:
-        return element.extra[key]
-    return CATEGORY_DEFAULTS.get(element.category, {}).get(key, default)
+# 或者一次性设置
+sofa.set_properties({
+    "position": [4, 3, 0],
+    "size": [2.5, 1, 0.8],
+    "color": "#8B4513"
+})
+```
+
+**注册表方法**：
+
+| 方法 | 说明 | 示例 |
+|------|------|------|
+| `register(element)` | 注册元素 | `registry.register(element)` |
+| `delete(element_id)` | 删除元素 | `registry.delete("elem_xxx")` |
+| `find(element_id)` | 按ID查找 | `registry.find("elem_xxx")` |
+| `find_by_name(name)` | 按名称查找 | `registry.find_by_name("沙发")` |
+| `find_by_category(category)` | 按分类查找 | `registry.find_by_category("device")` |
+| `search(query)` | 搜索元素 | `registry.search("灯")` |
+
+### 3.9 属性查询机制
+
+**属性统一存储**：所有属性都存储在 `properties` 字典中。
+
+```python
+# 获取属性
+element.get_property("state", "off")      # 获取状态，默认 "off"
+element.get_property("is_space", False)   # 获取是否为空间，默认 False
+
+# 设置属性
+element.set_property("color", "red")
+element.set_property("state", "on")
+
+# 批量设置
+element.set_properties({
+    "color": "red",
+    "state": "on",
+    "brightness": 80
+})
 ```
 
 **便捷方法**：
 
 ```python
-element.is_space()        # 是否为空间类型
+element.is_space()        # 是否为空间类型（properties.get("is_space", False)）
 element.is_toggleable()   # 是否可切换状态
 element.is_movable()      # 是否可自主移动
 element.is_custom_model() # 是否为自定义模型
 ```
 
-### 3.9 属性定义系统
+### 3.10 属性定义系统
 
 **核心原则**：元素的编辑和展示应基于属性定义系统，避免硬编码。
 
