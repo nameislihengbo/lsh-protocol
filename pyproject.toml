@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lsh-protocol"
-version = "3.2.0"
-description = "LSH Protocol - 万物皆元素，属性驱动，无限扩展"
+version = "3.2.1"
+description = "LSH Protocol - 虚拟现实交互协议"
 readme = "SPEC.md"
 license = {text = "MIT"}
 authors = [
@@ -13,13 +13,15 @@ authors = [
 ]
 keywords = [
     "protocol",
-    "virtual-world",
-    "view-synchronization",
+    "virtual-reality",
+    "interaction",
+    "synchronization",
     "spatial",
     "3d",
     "digital-twin",
     "smart-home",
-    "metaverse"
+    "metaverse",
+    "embodied-ai"
 ]
 classifiers = [
     "Development Status :: 5 - Production/Stable",
@@ -35,6 +37,11 @@ classifiers = [
 ]
 requires-python = ">=3.10"
 dependencies = []
+
+[project.scripts]
+lsh-schema = "lsh.tools.generate_schema:main"
+lsh-typescript = "lsh.tools.generate_typescript:main"
+lsh-snippets = "lsh.tools.generate_snippets:main"
 
 [project.optional-dependencies]
 dev = [

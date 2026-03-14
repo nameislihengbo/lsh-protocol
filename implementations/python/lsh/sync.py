@@ -1,7 +1,7 @@
 """
 LSH Protocol Synchronization Types
 
-LSH 协议同步机制：
+LSH 协议同步机制 - 虚拟现实交互协议
 - ViewSyncEvents: 事件类型
 - PositionData: 位置数据
 - SizeData: 尺寸数据
@@ -12,6 +12,7 @@ LSH 协议同步机制：
 - 万物皆元素：所有对象都是元素
 - 属性驱动：所有内容通过属性表达
 - 无限扩展：任意属性，无限可能
+- 交互同步：发布-订阅模式，交互实时同步到所有端
 """
 
 from enum import Enum

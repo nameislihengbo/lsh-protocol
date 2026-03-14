@@ -4,7 +4,7 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 3.2.0              |
+| 版本   | 3.2.1              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
 | 日期   | 2026-03-14         |
@@ -14,13 +14,14 @@
 
 ## 1. 摘要
 
-LSH 协议是一种**万物皆元素的统一协议**，将一切对象抽象为元素，通过属性驱动实现无限扩展。
+LSH 协议是一种**虚拟现实交互协议**，通过"万物皆元素、属性驱动、无限扩展"的设计哲学，为 AI、视图、引擎、前后端提供统一的交互标准。
 
 **核心设计**：
 
 - **万物皆元素**：一切对象都是元素（设备、家具、房间、甚至"磁场"等抽象概念）
 - **属性驱动**：所有内容都通过属性表达，无类型约束
 - **无限扩展**：任意属性，无限可能
+- **交互同步**：发布-订阅模式，交互实时同步到所有端
 
 ---
 
@@ -47,53 +48,38 @@ LSH 协议是一种**万物皆元素的统一协议**，将一切对象抽象为
 ### 3.2 使用示例
 
 ```python
-from lsh import SceneElement, SceneElementRegistry
+from lsh import SceneElement, SceneElementRegistry, view_sync, ViewSyncEvents
 
-# 创建空白元素
-element = SceneElement.create()
-
-# 创建沙发
-sofa = SceneElement.create({
-    "name": "沙发",
-    "category": "furniture",
-    "position": [4, 3, 0],
-    "size": [2.5, 1, 0.8],
-    "eng_name": "sofa",
-    "color": "#8B4513"
+# 创建元素（万物皆元素）
+element = SceneElement.create({
+    "id": "elem_001",
+    "name": "客厅",
+    "category": "room",
+    "position": [3, 3, 0],
+    "size": [6, 6, 3]
 })
-
-# 创建设备
-light = SceneElement.create({
-    "name": "客厅灯",
-    "category": "device",
-    "position": [3, 3, 2.8],
-    "state": "off"
-})
-
-# 磁场（抽象元素）
-field = SceneElement.create({"name": "磁场"})
 
 # 属性操作
-sofa.get_property("name")           # "沙发"
-sofa.set_property("color", "red")   # 设置颜色
+element.get_property("name")           # "客厅"
+element.set_property("room_type", "living_room")
 
 # 注册表
 registry = SceneElementRegistry()
-registry.register(sofa)
+registry.register(element)
 
 # 按属性查找
-registry.find_by_property("category", "device")  # 所有设备
-registry.find_by_property("name", "沙发")          # 名称为"沙发"的元素
+registry.find_by_property("category", "room")
 
-# 搜索
-registry.search("灯")  # 搜索包含"灯"的所有元素
+# 交互同步
+view_sync.subscribe(ViewSyncEvents.ELEMENT_ADDED, on_element_added)
+view_sync.publish_element_added(element)
 ```
 
 ### 3.3 常用属性
 
 | 属性 | 说明 | 示例 |
 |------|------|------|
-| `id` | 唯一标识（系统生成） | `elem_a3f8c2d1e4b5` |
+| `id` | 唯一标识（系统生成，简单递增） | `elem_0`, `elem_1`, `elem_2` |
 | `name` | 名称 | `"沙发"` |
 | `category` | 分类 | `"device"`, `"furniture"`, `"room"` |
 | `position` | 位置 [x, y, z] | `[4, 3, 0]` |
@@ -101,16 +87,26 @@ registry.search("灯")  # 搜索包含"灯"的所有元素
 | `eng_name` | 英文名（扩展） | `"sofa"` |
 | `color` | 颜色 | `"#8B4513"` |
 | `state` | 状态 | `"on"`, `"off"` |
-    "online": True,                       # 在线状态
-}
+| `*` | 任意自定义属性 | 业务扩展 |
 
-# 传感器数据
-extra = {
+**设备扩展属性示例**：
+```python
+# 智能设备
+device = SceneElement.create({
+    "name": "智能灯",
+    "category": "device",
+    "online": True,                        # 在线状态
+})
+
+# 传感器
+sensor = SceneElement.create({
+    "name": "温度传感器",
+    "category": "device",
     "sensor_type": "temperature",         # 传感器类型
     "sensor_value": 25.5,                 # 当前值
     "sensor_unit": "°C",                  # 单位
     "last_update": "2026-03-08T10:30:00", # 最后更新时间
-}
+})
 ```
 
 ### 3.4 三要素抽象
@@ -143,13 +139,17 @@ LSH 协议将虚拟世界和现实世界统一抽象为三个核心要素：
 
 ```python
 # 最简单的元素 - 只有名称
-field = SceneElement.create("磁场")
+field = SceneElement.create({"name": "磁场"})
 
 # 带分类的元素
-field = SceneElement.create("磁场", {"category": "field"})
+field = SceneElement.create({
+    "name": "磁场",
+    "category": "field"
+})
 
-# 创建设备 - 名称 + 属性
-light = SceneElement.create("客厅灯", {
+# 创建设备
+light = SceneElement.create({
+    "name": "客厅灯",
     "category": "device",
     "position": [3, 3, 2.8],
     "size": [0.3, 0.3, 0.3],
@@ -157,31 +157,33 @@ light = SceneElement.create("客厅灯", {
 })
 
 # 创建家具
-sofa = SceneElement.create("沙发", {
+sofa = SceneElement.create({
+    "name": "沙发",
     "category": "furniture",
     "position": [4, 3, 0],
     "size": [2.5, 1, 0.8],
     "color": "#8B4513"
 })
 
-# ID 由系统自动生成，如: elem_a3f8c2d1e4b5
-print(sofa.id)  # elem_a3f8c2d1e4b5
+# ID 由系统自动生成（简单递增：elem_0, elem_1, elem_2）
+print(sofa.id)  # elem_0
 ```
 
 **元素属性结构**：
 
 | 属性 | 类型 | 说明 | 来源 |
 |------|------|------|------|
-| `id` | str | 唯一标识（关系） | 系统生成 |
-| `name` | str | 元素名称（元素） | 用户定义 |
-| `category` | str | 业务分类 | 属性字典 |
-| `position` | List[float] | 位置 (x, y, z) | 属性字典 |
-| `size` | List[float] | 尺寸 (width, depth, height) | 属性字典 |
-| `rotation` | List[float] | 旋转 (rx, ry, rz) | 属性字典 |
-| `parent_id` | str | 父元素 ID | 属性字典 |
-| `children_ids` | List[str] | 子元素 ID 列表 | 系统维护 |
-| `visible` | bool | 是否可见 | 属性字典 |
-| `extra` | Dict | 自定义属性 | 属性字典 |
+| `id` | str | 唯一标识 | 系统生成 |
+| `name` | str | 元素名称 | 用户定义 |
+| `category` | str | 业务分类 | 用户定义 |
+| `position` | List[float] | 位置 [x, y, z] | 用户定义 |
+| `size` | List[float] | 尺寸 [width, depth, height] | 用户定义 |
+| `rotation` | List[float] | 旋转 [rx, ry, rz] | 用户定义 |
+| `parent_id` | str | 父元素 ID | 用户定义 |
+| `visible` | bool | 是否可见 | 用户定义 |
+| `*` | Any | 任意自定义属性 | 用户定义 |
+
+> **注意**：所有属性都是平级的，没有 `extra` 字段。任意属性直接设置即可。
 
 ### 3.6 关系 (Relation)
 
@@ -190,8 +192,7 @@ print(sofa.id)  # elem_a3f8c2d1e4b5
 | 关系类型 | 属性 | 说明 |
 |----------|------|------|
 | 层级关系 | `parent_id` | 父元素 ID |
-| 包含关系 | `children_ids` | 子元素 ID 列表 |
-| 引用关系 | `extra.ref_*` | 其他引用 |
+| 引用关系 | 自定义属性 | 如 `device_id`, `room_id` 等 |
 
 ### 3.7 属性 (Property)
 
@@ -199,12 +200,12 @@ print(sofa.id)  # elem_a3f8c2d1e4b5
 
 | 属性类别 | 属性 | 说明 |
 |----------|------|------|
-| **基础** | `category`, `tags` | 分类和标签 |
+| **基础** | `name`, `category`, `tags` | 名称、分类和标签 |
 | **空间** | `position`, `size`, `rotation` | 空间变换 |
 | **关系** | `parent_id` | 层级关系 |
 | **状态** | `visible`, `state` | 运行状态 |
 | **外观** | `color`, `material` | 视觉属性 |
-| **扩展** | 其他自定义属性 | 业务扩展 |
+| **扩展** | 任意自定义属性 | 业务扩展 |
 
 ### 3.8 元素操作方法
 
@@ -212,28 +213,27 @@ print(sofa.id)  # elem_a3f8c2d1e4b5
 
 | 方法 | 说明 | 示例 |
 |------|------|------|
-| `move(position/offset)` | 移动元素 | `element.move(position=[1, 2, 0])` |
-| `resize(size)` | 调整尺寸 | `element.resize([2, 1, 0.8])` |
-| `rotate(rotation/offset)` | 旋转元素 | `element.rotate(offset=(0, 90, 0))` |
+| `get_property(key, default)` | 获取属性 | `element.get_property("name")` |
 | `set_property(key, value)` | 设置单个属性 | `element.set_property("color", "red")` |
 | `set_properties(dict)` | 批量设置属性 | `element.set_properties({"color": "red", "state": "on"})` |
-| `rename(name)` | 重命名 | `element.rename("新沙发")` |
-| `show()` / `hide()` | 显示/隐藏 | `element.hide()` |
-| `toggle_visibility()` | 切换可见性 | `element.toggle_visibility()` |
+| `to_dict()` | 转换为字典 | `element.to_dict()` |
+
+> **注意**：`name`, `category` 等属性通过 `set_property` 设置，如 `element.set_property("name", "新名称")`
 
 **链式调用示例**：
 
 ```python
 # 创建并设置属性
-sofa = SceneElement.create("沙发", {"category": "furniture"})
-sofa.move(position=[4, 3, 0]).resize([2.5, 1, 0.8]).set_property("color", "#8B4513")
-
-# 或者一次性设置
-sofa.set_properties({
+sofa = SceneElement.create({
+    "name": "沙发",
+    "category": "furniture",
     "position": [4, 3, 0],
     "size": [2.5, 1, 0.8],
     "color": "#8B4513"
 })
+
+# 链式设置属性
+sofa.set_property("color", "red").set_property("state", "new")
 ```
 
 **注册表方法**：
@@ -330,10 +330,18 @@ text = display.get_display_text()
 
 ```python
 # 普通 ball：使用默认配置
-ball = SceneElement(id="ball_001", category="ball", extra={"can_pick_up": True})
+ball = SceneElement.create({
+    "id": "ball_001",
+    "category": "ball",
+    "can_pick_up": True
+})
 
-# 特殊 ball：通过 extra 覆盖
-earth = SceneElement(id="earth_001", category="ball", extra={"can_pick_up": False})
+# 特殊 ball：通过属性覆盖
+earth = SceneElement.create({
+    "id": "earth_001",
+    "category": "ball",
+    "can_pick_up": False
+})
 ```
 
 ### 3.12 业务分类
@@ -694,7 +702,7 @@ center = (
 | 视图                      | 原始坐标系 | 适配方式                                        |
 | ------------------------- | ---------- | ----------------------------------------------- |
 | **2D 视图 (Qt)** | Y 轴向下 | `scale(1, -1)` 翻转 Y 轴，俯视图显示 X-Y 平面 |
-| **3D 视图 (VTK)** | Y 轴向上 | 转换公式：VTK(X, Y, Z) = LSH(X, Z, Y) |
+| **3D 视图 (VTK)** | Y 轴向上 | 转换公式：VTK(X, Y, Z) = LSH(X, Z, -Y) |
 | **3D 视图 (Godot)** | Z 轴向后 | 转换公式：Godot(X, Y, Z) = LSH(X, Z, -Y) |
 | **结构视图**        | 无坐标     | 不涉及                                          |
 
@@ -1109,11 +1117,10 @@ class ViewSyncEvent:
     """视图同步事件"""
     event_type: ViewSyncEvents           # 事件类型
     target_id: str                       # 目标对象 ID
-    target_type: str = ""                # 目标类型（space/entity）
     position: Optional[PositionData] = None  # 位置信息
     size: Optional[SizeData] = None          # 尺寸信息
-    parent_id: Optional[str] = None          # 父元素 ID（层级变化时）
-    extra: Dict[str, Any] = field(default_factory=dict)  # 扩展字段
+    properties: Dict[str, Any] = field(default_factory=dict)  # 属性字典
+    source: Optional[str] = None             # 事件来源
 ```
 
 ### 8.5 场景元素 (SceneElement)
@@ -1129,88 +1136,60 @@ class SceneElement:
     3. LSH 同步
     
     v3.0: 移除 element_type，统一通过 category 区分
+    v3.2: 所有属性平级，无 extra 字段
     """
-    id: str                              # 元素唯一标识
-    name: str                            # 元素名称
-    category: str = ""                   # 业务分类（room, device, furniture 等）
-  
-    # 变换属性
-    position: List[float, float, float] = [0.0, 0.0, 0.0]  # 底面中心 (x, y, z) = (右, 前, 0)
-    rotation: List[float, float, float] = [0.0, 0.0, 0.0]
-    scale: float = 1.0
-  
-    # 尺寸信息
-    size: List[float, float, float] = [1.0, 1.0, 1.0]  # (width, depth, height) = (宽, 深, 高)
-  
-    # 边界（空间类型需要）
-    bounds: Optional[Bounds] = None
-  
-    # 层级关系
-    parent_id: Optional[str] = None
-    children_ids: List[str] = field(default_factory=list)
-    hierarchy_policy: HierarchyPolicy = HierarchyPolicy.FOLLOW_PARENT
-    local_position: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-    local_rotation: Tuple[float, float, float] = (0.0, 0.0, 0.0)
-  
-    # 标签
-    tags: List[str] = field(default_factory=list)
-  
-    # 扩展数据
-    extra: Dict[str, Any] = field(default_factory=dict)
+    properties: Dict[str, Any] = field(default_factory=dict)
     
-    # 元数据
-    created_at: str = field(default_factory=lambda: datetime.now().isoformat())
-    updated_at: str = field(default_factory=lambda: datetime.now().isoformat())
-  
-    # 可见性
-    visible: bool = True
-    searchable: bool = True
+    @property
+    def id(self) -> str:
+        """元素唯一标识"""
+        return self.properties.get("id", "")
     
-    # ===== 属性查询方法 =====
+    @property
+    def name(self) -> str:
+        """元素名称"""
+        return self.properties.get("name", "")
+    
+    @property
+    def category(self) -> str:
+        """业务分类"""
+        return self.properties.get("category", "")
     
     def get_property(self, key: str, default: Any = None) -> Any:
-        """获取属性：优先 extra，其次 CATEGORY_DEFAULTS[category]"""
-        pass
+        """获取属性"""
+        return self.properties.get(key, default)
     
-    def is_space(self) -> bool:
-        """是否为空间类型（有空间边界）"""
-        return self.get_property("is_space", False)
+    def set_property(self, key: str, value: Any) -> 'SceneElement':
+        """设置属性（支持链式调用）"""
+        self.properties[key] = value
+        return self
     
-    def is_toggleable(self) -> bool:
-        """是否可切换状态"""
-        return self.get_property("is_toggleable", False)
+    @classmethod
+    def create(cls, properties: Dict[str, Any] = None) -> 'SceneElement':
+        """创建元素"""
+        return cls(properties=properties or {})
     
-    def is_movable(self) -> bool:
-        """是否可自主移动"""
-        return self.get_property("is_movable", False)
-    
-    def is_custom_model(self) -> bool:
-        """是否为自定义导入模型"""
-        return self.get_property("is_custom_model", False)
+    def to_dict(self) -> Dict[str, Any]:
+        """转换为字典"""
+        return {"properties": self.properties.copy()}
 ```
 
-**extra 字段设计原则**：
-
-`extra` 是一个灵活的扩展字段，用于存储与元素相关的额外数据。但有以下限制：
-
-1. **只存储简单数据**：字符串、数字、布尔值、列表、字典
-2. **不存储复杂对象**：不应存储 SceneElement 或其他复杂对象
-3. **关联元素使用 ID 引用**：如需关联其他元素，使用 `parent_id`/`children_ids` 或存储 ID 列表
+> **注意**：v3.2 移除了 `extra` 字段，所有属性统一存储在 `properties` 中。
 
 ```python
 # ✅ 正确用法
-device.set_extra_property("room_id", "room_001")
-device.set_extra_property("state", "on")
-device.set_extra_property("power", 60)
+device.set_property("room_id", "room_001")
+device.set_property("state", "on")
+device.set_property("power", 60)
 
 # ❌ 错误用法
-device.set_extra_property("room", room_object)  # 不应存储对象
+device.set_property("room", room_object)  # 不应存储对象
 ```
 
 **典型用途**：
 
-| 元素类型 | extra 中存储的内容 |
-|---------|-------------------|
+| 元素类型 | 属性示例 |
+|---------|---------|
 | 房间 | `room_type`, `device_ids`, `component_ids` |
 | 设备 | `device_type`, `state`, `room_id` |
 | 家具 | `furniture_type`, `room_id` |
@@ -1277,64 +1256,64 @@ class SceneElementRegistry:
 
 ### 9.1 统一元素事件
 
-LSH 协议 v2.0.0 统一使用 `ELEMENT_*` 事件，通过 `target_type` 区分 SPACE/ENTITY，通过 `extra.category` 区分业务类型：
+LSH 协议 v3.0 统一使用 `ELEMENT_*` 事件，通过 `properties` 传递所有属性：
 
-| 事件类型                       | 值                             | 携带数据              | 说明             |
-| ------------------------------ | ------------------------------ | --------------------- | ---------------- |
-| `ELEMENT_ADDED`              | `element_added`              | position, size, extra | 元素添加         |
-| `ELEMENT_DELETED`            | `element_deleted`            | extra                 | 元素删除         |
-| `ELEMENT_CHANGED`            | `element_changed`            | position, size, extra | 元素属性变化     |
+| 事件类型                       | 值                             | 携带数据                    | 说明             |
+| ------------------------------ | ------------------------------ | --------------------------- | ---------------- |
+| `ELEMENT_ADDED`              | `element_added`              | position, size, properties | 元素添加         |
+| `ELEMENT_DELETED`            | `element_deleted`            | properties                  | 元素删除         |
+| `ELEMENT_CHANGED`            | `element_changed`            | position, size, properties | 元素属性变化     |
 | `ELEMENT_POSITION_CHANGED`   | `element_position_changed`   | position              | 元素位置变化     |
-| `ELEMENT_VISIBILITY_CHANGED` | `element_visibility_changed` | extra.visible         | 元素可见性变化   |
-| `ELEMENT_HIERARCHY_CHANGED`  | `element_hierarchy_changed`  | parent_id, extra      | 元素层级关系变化 |
-| `ELEMENTS_SYNC`              | `elements_sync`              | extra.elements        | 批量同步所有元素 |
+| `ELEMENT_VISIBILITY_CHANGED` | `element_visibility_changed` | properties.visible    | 元素可见性变化   |
+| `ELEMENT_HIERARCHY_CHANGED`  | `element_hierarchy_changed`  | parent_id, properties | 元素层级关系变化 |
+| `ELEMENTS_SYNC`              | `elements_sync`              | properties.elements   | 批量同步所有元素 |
 
 ### 9.2 场景事件
 
-| 事件类型                 | 值                       | 携带数据                                         | 说明         |
-| ------------------------ | ------------------------ | ------------------------------------------------ | ------------ |
-| `SCENE_ACTIVATED`      | `scene_activated`      | extra.scene_id                                   | 场景激活     |
-| `SCENE_CHANGED`        | `scene_changed`        | extra                                            | 场景变化     |
-| `SCENE_BOUNDS_CHANGED` | `scene_bounds_changed` | extra.{min_x, max_x, min_y, max_y, min_z, max_z} | 场景边界变化 |
+| 事件类型                 | 值                       | 携带数据                                           | 说明         |
+| ------------------------ | ------------------------ | -------------------------------------------------- | ------------ |
+| `SCENE_ACTIVATED`      | `scene_activated`      | properties.scene_id                                | 场景激活     |
+| `SCENE_CHANGED`        | `scene_changed`        | properties                                         | 场景变化     |
+| `SCENE_BOUNDS_CHANGED` | `scene_bounds_changed` | properties.{min_x, max_x, min_y, max_y, min_z, max_z} | 场景边界变化 |
 
 ### 9.3 编辑模式事件
 
-| 事件类型              | 值                    | 携带数据      | 说明         |
-| --------------------- | --------------------- | ------------- | ------------ |
-| `EDIT_MODE_CHANGED` | `edit_mode_changed` | extra.enabled | 编辑模式切换 |
+| 事件类型              | 值                    | 携带数据           | 说明         |
+| --------------------- | --------------------- | ------------------ | ------------ |
+| `EDIT_MODE_CHANGED` | `edit_mode_changed` | properties.enabled | 编辑模式切换 |
 
 ### 9.4 路径规划事件
 
 #### 9.4.1 基础路径事件
 
-| 事件类型                   | 值                         | 携带数据                                          | 说明         |
-| -------------------------- | -------------------------- | ------------------------------------------------- | ------------ |
-| `PATH_CALCULATED`        | `path_calculated`        | extra.{path, distance, estimated_time, waypoints} | 路径计算完成 |
-| `PATH_VISUALIZED`        | `path_visualized`        | extra.{path, view_type, color, clear_previous}    | 路径可视化   |
-| `PATH_EXECUTED`          | `path_executed`          | extra.{success, message}                          | 路径执行完成 |
-| `NAVIGATION_MAP_UPDATED` | `navigation_map_updated` | extra.{grid_info}                                 | 导航地图更新 |
+| 事件类型                   | 值                         | 携带数据                                             | 说明         |
+| -------------------------- | -------------------------- | ---------------------------------------------------- | ------------ |
+| `PATH_CALCULATED`        | `path_calculated`        | properties.{path, distance, estimated_time, waypoints} | 路径计算完成 |
+| `PATH_VISUALIZED`        | `path_visualized`        | properties.{path, view_type, color, clear_previous}    | 路径可视化   |
+| `PATH_EXECUTED`          | `path_executed`          | properties.{success, message}                          | 路径执行完成 |
+| `NAVIGATION_MAP_UPDATED` | `navigation_map_updated` | properties.{grid_info}                                 | 导航地图更新 |
 
 #### 9.4.2 路径选择事件
 
-| 事件类型                        | 值                              | 携带数据                           | 说明             |
-| ------------------------------- | ------------------------------- | ---------------------------------- | ---------------- |
-| `PATH_START_SELECTED`         | `path_start_selected`         | position, target_id (element_id)   | 路径起点选择     |
-| `PATH_END_SELECTED`           | `path_end_selected`           | position, target_id (element_id)   | 路径终点选择     |
-| `PATH_WAYPOINT_ADDED`         | `path_waypoint_added`         | position, target_id, extra.{index} | 添加途径点       |
-| `PATH_WAYPOINT_REMOVED`       | `path_waypoint_removed`       | position, target_id, extra.{index} | 移除途径点       |
-| `PATH_WAYPOINTS_CLEARED`      | `path_waypoints_cleared`      | -                                  | 清除所有途径点   |
-| `PATH_SELECTION_MODE_CHANGED` | `path_selection_mode_changed` | extra.mode                         | 路径选择模式变化 |
-| `PATH_SELECTION_CLEARED`      | `path_selection_cleared`      | -                                  | 路径选择清除     |
+| 事件类型                        | 值                              | 携带数据                              | 说明             |
+| ------------------------------- | ------------------------------- | ------------------------------------- | ---------------- |
+| `PATH_START_SELECTED`         | `path_start_selected`         | position, target_id (element_id)      | 路径起点选择     |
+| `PATH_END_SELECTED`           | `path_end_selected`           | position, target_id (element_id)      | 路径终点选择     |
+| `PATH_WAYPOINT_ADDED`         | `path_waypoint_added`         | position, target_id, properties.index | 添加途径点       |
+| `PATH_WAYPOINT_REMOVED`       | `path_waypoint_removed`       | position, target_id, properties.index | 移除途径点       |
+| `PATH_WAYPOINTS_CLEARED`      | `path_waypoints_cleared`      | -                                     | 清除所有途径点   |
+| `PATH_SELECTION_MODE_CHANGED` | `path_selection_mode_changed` | properties.mode                       | 路径选择模式变化 |
+| `PATH_SELECTION_CLEARED`      | `path_selection_cleared`      | -                                     | 路径选择清除     |
 
 #### 9.4.3 路径规划模式事件
 
-| 事件类型                            | 值                                  | 携带数据                                   | 说明             |
-| ----------------------------------- | ----------------------------------- | ------------------------------------------ | ---------------- |
-| `PATH_PLANNING_MODE_CHANGED`      | `path_planning_mode_changed`      | extra.{mode, config}                       | 路径规划模式变化 |
-| `PATH_OBSTACLE_AVOIDANCE_CHANGED` | `path_obstacle_avoidance_changed` | extra.{enabled, obstacles}                 | 避障设置变化     |
-| `PATH_COVERAGE_MODE_CHANGED`      | `path_coverage_mode_changed`      | extra.{enabled, algorithm, area_bounds}    | 覆盖模式设置变化 |
-| `PATH_COVERAGE_PROGRESS`          | `path_coverage_progress`          | extra.{progress, covered_area, total_area} | 覆盖进度更新     |
-| `PATH_COVERAGE_COMPLETED`         | `path_coverage_completed`         | extra.{success, coverage_rate, path}       | 覆盖完成         |
+| 事件类型                            | 值                                  | 携带数据                                        | 说明             |
+| ----------------------------------- | ----------------------------------- | ----------------------------------------------- | ---------------- |
+| `PATH_PLANNING_MODE_CHANGED`      | `path_planning_mode_changed`      | properties.{mode, config}                       | 路径规划模式变化 |
+| `PATH_OBSTACLE_AVOIDANCE_CHANGED` | `path_obstacle_avoidance_changed` | properties.{enabled, obstacles}                 | 避障设置变化     |
+| `PATH_COVERAGE_MODE_CHANGED`      | `path_coverage_mode_changed`      | properties.{enabled, algorithm, area_bounds}    | 覆盖模式设置变化 |
+| `PATH_COVERAGE_PROGRESS`          | `path_coverage_progress`          | properties.{progress, covered_area, total_area} | 覆盖进度更新     |
+| `PATH_COVERAGE_COMPLETED`         | `path_coverage_completed`         | properties.{success, coverage_rate, path}       | 覆盖完成         |
 
 ### 9.5 路径规划数据结构
 
@@ -1432,11 +1411,11 @@ class CoveragePathResult:
 
 ### 8.7 模型模板事件
 
-| 事件类型                   | 值                         | 携带数据              | 说明         |
-| -------------------------- | -------------------------- | --------------------- | ------------ |
-| `MODEL_TEMPLATE_ADDED`   | `model_template_added`   | extra.{template_data} | 模型模板添加 |
-| `MODEL_TEMPLATE_UPDATED` | `model_template_updated` | extra.{template_data} | 模型模板更新 |
-| `MODEL_TEMPLATE_REMOVED` | `model_template_removed` | target_id             | 模型模板移除 |
+| 事件类型                   | 值                         | 携带数据                   | 说明         |
+| -------------------------- | -------------------------- | -------------------------- | ------------ |
+| `MODEL_TEMPLATE_ADDED`   | `model_template_added`   | properties.{template_data} | 模型模板添加 |
+| `MODEL_TEMPLATE_UPDATED` | `model_template_updated` | properties.{template_data} | 模型模板更新 |
+| `MODEL_TEMPLATE_REMOVED` | `model_template_removed` | target_id                  | 模型模板移除 |
 
 ### 8.8 全局事件
 
@@ -1512,7 +1491,7 @@ def publish_element_added(self, element: SceneElement) -> None:
     pass
 
 def publish_element_deleted(self, element_id: str, category: str = "", 
-                            extra: dict = None) -> None:
+                            properties: dict = None) -> None:
     """发布元素删除事件"""
     pass
 
@@ -1600,25 +1579,26 @@ from lsh import SceneElement, view_sync, ViewSyncEvents
 # 创建房间元素
 # position=(x, y, z) = (宽度方向, 深度方向, 高度方向)
 # size=(width, depth, height) = (宽度, 深度, 高度)
-room = SceneElement.create(
-    id="room_001", 
-    name="客厅", 
-    category="room",
-    position=(0, 0, 0),          # 原点位置
-    size=(5.0, 4.0, 2.8),        # 宽5米, 深4米, 高2.8米
-)
+room = SceneElement.create({
+    "id": "room_001", 
+    "name": "客厅", 
+    "category": "room",
+    "position": [0, 0, 0],          # 原点位置
+    "size": [5.0, 4.0, 2.8],        # 宽5米, 深4米, 高2.8米
+})
 
 # 创建设备元素
 # 灯的位置：房间中心偏移 (2.5, 2.0, 1.5)
 # x=2.5 (宽度方向中心), y=2.0 (深度方向中心), z=1.5 (高度方向，离地1.5米)
-device = SceneElement.create(
-    id="device_001",
-    name="智能灯",
-    category="device",
-    position=(2.5, 2.0, 1.5),    # 宽度中心, 深度中心, 离地1.5米
-    parent_id="room_001",
-    extra={"state": "off", "device_type": "light"}
-)
+device = SceneElement.create({
+    "id": "device_001",
+    "name": "智能灯",
+    "category": "device",
+    "position": [2.5, 2.0, 1.5],    # 宽度中心, 深度中心, 离地1.5米
+    "parent_id": "room_001",
+    "state": "off",
+    "device_type": "light"
+})
 
 # 发布元素添加事件
 view_sync.publish_element_added(room)
@@ -1655,7 +1635,7 @@ class VTK3DView:
         """响应元素删除"""
         category = event.target_type
         if category == "custom_model":
-            delete_file = event.extra.get("delete_file", False)
+            delete_file = event.properties.get("delete_file", False)
             self._remove_model(event.target_id, delete_file)
 ```
 
@@ -1737,9 +1717,9 @@ def calculate_path(start_id: str, end_position: PositionData) -> List[PositionDa
 ```python
 def on_element_changed(event: ViewSyncEvent):
     """元素变化触发仿真"""
-    category = event.extra.get("category", "")
+    category = event.properties.get("category", "")
     if category == "device":
-        state = event.extra.get("state")
+        state = event.properties.get("state")
         if state == "on":
             simulate_device_activation(event.target_id)
 ```
@@ -2008,24 +1988,24 @@ actor.SetOrientation(0, 0, new_rotation)
 
 #### 13.7.1 交互状态事件
 
-| 事件类型                     | 值                           | 携带数据                    | 说明         |
-| ---------------------------- | ---------------------------- | --------------------------- | ------------ |
-| `INTERACTION_MODE_CHANGED` | `interaction_mode_changed` | extra.{mode, previous_mode} | 交互模式变化 |
-| `ELEMENT_SELECTED`         | `element_selected`         | target_id, position         | 元素被选中   |
-| `ELEMENT_DESELECTED`       | `element_deselected`       | target_id                   | 元素取消选中 |
-| `ELEMENT_DRAG_START`       | `element_drag_start`       | target_id, position         | 开始拖动元素 |
-| `ELEMENT_DRAG_END`         | `element_drag_end`         | target_id, position         | 结束拖动元素 |
-| `ELEMENT_ROTATE_START`     | `element_rotate_start`     | target_id, rotation         | 开始旋转元素 |
-| `ELEMENT_ROTATE_END`       | `element_rotate_end`       | target_id, rotation         | 结束旋转元素 |
+| 事件类型                     | 值                           | 携带数据                         | 说明         |
+| ---------------------------- | ---------------------------- | -------------------------------- | ------------ |
+| `INTERACTION_MODE_CHANGED` | `interaction_mode_changed` | properties.{mode, previous_mode} | 交互模式变化 |
+| `ELEMENT_SELECTED`         | `element_selected`         | target_id, position              | 元素被选中   |
+| `ELEMENT_DESELECTED`       | `element_deselected`       | target_id                        | 元素取消选中 |
+| `ELEMENT_DRAG_START`       | `element_drag_start`       | target_id, position              | 开始拖动元素 |
+| `ELEMENT_DRAG_END`         | `element_drag_end`         | target_id, position              | 结束拖动元素 |
+| `ELEMENT_ROTATE_START`     | `element_rotate_start`     | target_id, rotation              | 开始旋转元素 |
+| `ELEMENT_ROTATE_END`       | `element_rotate_end`       | target_id, rotation              | 结束旋转元素 |
 
 #### 13.7.2 相机事件
 
-| 事件类型                | 值                      | 携带数据                   | 说明                                       |
-| ----------------------- | ----------------------- | -------------------------- | ------------------------------------------ |
-| `CAMERA_ROTATED`      | `camera_rotated`      | extra.{azimuth, elevation} | 相机旋转                                   |
-| `CAMERA_PANNED`       | `camera_panned`       | position (focal_point)     | 相机平移                                   |
-| `CAMERA_ZOOMED`       | `camera_zoomed`       | extra.{factor, position}   | 相机缩放                                   |
-| `CAMERA_VIEW_CHANGED` | `camera_view_changed` | extra.view_type            | 相机视角切换（top/front/side/perspective） |
+| 事件类型                | 值                      | 携带数据                        | 说明                                       |
+| ----------------------- | ----------------------- | ------------------------------- | ------------------------------------------ |
+| `CAMERA_ROTATED`      | `camera_rotated`      | properties.{azimuth, elevation} | 相机旋转                                   |
+| `CAMERA_PANNED`       | `camera_panned`       | position (focal_point)          | 相机平移                                   |
+| `CAMERA_ZOOMED`       | `camera_zoomed`       | properties.{factor, position}  | 相机缩放                                   |
+| `CAMERA_VIEW_CHANGED` | `camera_view_changed` | properties.view_type            | 相机视角切换（top/front/side/perspective） |
 
 ### 13.8 实现参考
 
@@ -2100,11 +2080,11 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 | 版本  | 日期       | 变更内容                                                                                                                                                                                                                                  |
 | ----- | ---------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 3.1.1 | 2026-03-12 | **架构改造完成**：完成 Home3D/Multimodal/Robot 三模块 LSH 协议 v3.0 改造；删除冗余文件（scene_element.py, view_sync.py, coord_transform.py, element_properties.py）；统一使用 `from lsh import` 导入；新增 category_config.py 业务类型配置；引擎模式统一（所有引擎继承 BaseEngine）；净减少 28,588 行代码 |
+| 3.2.1 | 2026-03-14 | **AI 交互格式**：新增 AI 交互格式章节，为多模态 AI 模型提供原生支持；定义"万物皆元素、类型即属性、无限扩展、零定义"核心原则；Token 节省 97%；修正 VTK 坐标转换公式为 VTK(X,Y,Z) = LSH(X,Z,-Y)；参见 AI_FORMAT.md |
 | 3.1.1 | 2026-03-12 | **架构改造完成**：完成 Home3D/Multimodal/Robot 三模块 LSH 协议 v3.0 改造；删除冗余文件（scene_element.py, view_sync.py, coord_transform.py, element_properties.py）；统一使用 `from lsh import` 导入；新增 category_config.py 业务类型配置；引擎模式统一（所有引擎继承 BaseEngine）；测试框架模块化；净减少 28,588 行代码 |
 | 3.1.0 | 2026-03-10 | **三大模块统一**：Home3D/Multimodal/Robot 三模块统一遵循"万物皆为元素"原则；新增 AI 智能体元素类型（ai_model, ai_conversation, ai_message）；新增机器人元素类型（robot, robot_task, robot_experience）；完善元素分类体系，按模块组织 |
-| 3.0.1 | 2026-03-08 | **协议定位升级**：从"视图同步协议"升级为"虚拟现实统一协议"；完善 CATEGORY_DEFAULTS 配置；添加 `is_space()`、`is_toggleable()`、`is_movable()`、`is_custom_model()` 便捷方法；更新所有方法签名为 `category: str` |
-| 3.0.0 | 2026-03-07 | **核心概念简化**：从四要素（空间、实体、关系、属性）简化为三要素（元素、关系、属性）；移除 SPACE/ENTITY 类型区分，统一为 Element；新增属性查询机制（category 默认配置 + extra 覆盖） |
+| 3.0.1 | 2026-03-08 | **协议定位升级**：从"视图同步协议"升级为"虚拟现实交互协议"；完善 CATEGORY_DEFAULTS 配置；添加 `is_space()`、`is_toggleable()`、`is_movable()`、`is_custom_model()` 便捷方法；更新所有方法签名为 `category: str` |
+| 3.0.0 | 2026-03-07 | **核心概念简化**：从四要素（空间、实体、关系、属性）简化为三要素（元素、关系、属性）；移除 SPACE/ENTITY 类型区分，统一为 Element；新增属性查询机制（category 默认配置 + 属性统一存储） |
 | 2.6.0 | 2026-03-06 | **事件溯源架构**：定义事件溯源接口，支持时间旅行和状态回滚；新增 EventSourcingManager 管理器；完善路径规划适配新 LSH 架构 |
 | 2.5.0 | 2026-03-04 | **分层架构设计**：新增分层架构设计章节，定义 Model/ActorFactory/View 三层分离架构；确立"数据与渲染彻底分离"核心理念；明确层级职责、设计原则、禁止行为；口诀"Model定长相，Factory转演员，Render只管上场" |
 | 2.4.0 | 2026-03-04 | **内外坐标系分离架构**：新增架构规范章节，明确"输入数据使用LSH、输出数据使用LSH、内部渲染层转换"原则；定义架构规则、实现示例、禁止行为；确保系统对外统一使用LSH坐标系，内部渲染层透明转换 |
@@ -2116,21 +2096,70 @@ def drag_element(self, screen_x: float, screen_y: float):
 
 ---
 
-## 15. 未来规划 (Roadmap)
+## 15. AI 交互格式 (AI Format)
 
-### 15.1 v3.2.0 计划
+### 15.1 概述
+
+LSH 协议为多模态 AI 模型提供了原生支持，通过紧凑的数据格式实现高效的场景交互。
+
+**详细规范**：参见 [AI_FORMAT.md](./AI_FORMAT.md)
+
+### 15.2 核心原则
+
+| 原则 | 说明 |
+|------|------|
+| **万物皆元素** | 统一格式，无特殊处理，类型只是属性之一 |
+| **类型即属性** | `type=类型路径`，与其他属性平等，无特殊地位 |
+| **无限扩展** | 任意新类型直接写入属性，无需定义或编码 |
+| **零定义** | 不需要类型定义、属性定义、编码定义 |
+| **增量更新** | 只传输变化部分，最小化 Token 消耗 |
+
+### 15.3 格式规范
+
+**元素格式**：`id:name:@位置:容器:属性`
+
+```
+home_001:我的家:@0,0,0:-:type=home
+room_001:客厅:@0,0,0:home_001:type=room
+light_001:客厅灯:@2.5,2,2.8:room_001:type=device.light,s=off
+sofa_001:沙发:@4,3,0:room_001:type=furniture.sofa
+robot_001:扫地机:@3,3,0:room_001:type=robot.vacuum,bat=80
+field_001:磁场:@5,5,1:room_001:type=field,str=0.5
+```
+
+### 15.4 增量更新
+
+```
+light_001:s=on
+ac_001:t=26
+```
+
+### 15.5 Token 效率
+
+| 阶段 | Token | 说明 |
+|------|-------|------|
+| 系统提示 | ~50 | 永久缓存 |
+| 首次注入 | ~70 | 只有元素数据 |
+| 后续更新 | ~10 | 增量 |
+| **5轮总计** | **~110** | **节省 97%** |
+
+---
+
+## 16. 未来规划 (Roadmap)
+
+### 16.1 v3.3.0 计划
 
 - [ ] **跨语言 SDK**：JavaScript/TypeScript 支持
 - [ ] **现实世界适配器**：IoT 设备、传感器数据接入
 - [ ] **AI 元素交互**：AI 模型与设备元素联动
 
-### 15.2 v3.3.0 计划
+### 16.2 v3.4.0 计划
 
 - [ ] **性能优化**：大规模场景渲染优化
 - [ ] **持久化层**：元素状态存储与恢复
 - [ ] **机器人经验学习**：基于空间的经验积累
 
-### 15.3 v4.0.0 愿景
+### 16.3 v4.0.0 愿景
 
 - [ ] **分布式支持**：跨进程、跨设备同步
 - [ ] **冲突解决**：CRDT 集成，支持多人协作
@@ -2222,12 +2251,12 @@ view_sync.publish_element_position_changed("room_001", "room", 2.0, 3.0, 0)
 view_sync.publish_device_state_changed("device_001", DeviceState.ON)
 
 # v3.0
-element = SceneElement.create(
-    id="device_001",
-    name="智能灯",
-    category="device",
-    extra={"state": "on"}
-)
+element = SceneElement.create({
+    "id": "device_001",
+    "name": "智能灯",
+    "category": "device",
+    "state": "on"
+})
 view_sync.publish_element_changed(element)
 ```
 

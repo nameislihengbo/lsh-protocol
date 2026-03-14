@@ -1,12 +1,13 @@
 """
 LSH Protocol - Python Implementation
 
-LSH 协议 - 万物皆元素，属性驱动，无限扩展
+LSH 协议 - 虚拟现实交互协议
 
 设计哲学：
 - 万物皆元素：一切对象都是元素
 - 属性驱动：所有内容都通过属性表达
 - 无限扩展：任意属性，无限可能
+- 交互同步：发布-订阅模式，交互实时同步到所有端
 
 三要素：
 - 元素：一个空白容器
@@ -14,29 +15,30 @@ LSH 协议 - 万物皆元素，属性驱动，无限扩展
 - 属性：所有内容（name, category, position, size 等）
 
 使用方式：
-    from lsh import SceneElement, SceneElementRegistry
+    from lsh import SceneElement, SceneElementRegistry, view_sync, ViewSyncEvents
     
-    # 创建空白元素
-    element = SceneElement.create()
-    
-    # 创建沙发
-    sofa = SceneElement.create({
-        "name": "沙发",
-        "category": "furniture",
-        "position": [4, 3, 0],
-        "size": [2.5, 1, 0.8],
-        "eng_name": "sofa"
+    # 创建元素（万物皆元素）
+    element = SceneElement.create({
+        "name": "客厅",
+        "category": "room",
+        "position": [3, 3, 0],
+        "size": [6, 6, 3]
     })
     
     # 属性操作
-    sofa.get_property("name")           # "沙发"
-    sofa.set_property("color", "red")   # 设置颜色
+    element.get_property("name")           # "客厅"
+    element.set_property("room_type", "living_room")
     
     # 注册表
     registry = SceneElementRegistry()
-    registry.register(sofa)
-    registry.find_by_property("category", "furniture")
-    registry.find_by_property("name", "沙发")
+    registry.register(element)
+    
+    # 按属性查找
+    registry.find_by_property("category", "room")
+    
+    # 交互同步
+    view_sync.subscribe(ViewSyncEvents.ELEMENT_ADDED, on_element_added)
+    view_sync.publish_element_added(element)
 """
 
 from .core import (
@@ -61,6 +63,12 @@ from .properties import (
     get_editable_properties,
     get_display_properties,
     get_all_property_definitions,
+)
+from .validation import (
+    ValidationError,
+    ValidationResult,
+    validate_element,
+    validate_property_value,
 )
 from .coord import (
     lsh_to_godot_position,
@@ -99,6 +107,10 @@ __all__ = [
     "get_editable_properties",
     "get_display_properties",
     "get_all_property_definitions",
+    "ValidationError",
+    "ValidationResult",
+    "validate_element",
+    "validate_property_value",
     "lsh_to_godot_position",
     "lsh_to_godot_size",
     "lsh_to_godot_rotation",

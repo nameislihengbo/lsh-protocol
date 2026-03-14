@@ -1,12 +1,13 @@
 """
 LSH Protocol Core Types
 
-LSH 协议核心类型
+LSH 协议核心类型 - 虚拟现实交互协议
 
 设计哲学：
 - 万物皆元素：一切对象都是元素
 - 属性驱动：所有内容都通过属性表达
 - 无限扩展：任意属性，无限可能
+- 交互同步：发布-订阅模式，交互实时同步到所有端
 
 三要素：
 - 元素：一个空白容器
@@ -17,7 +18,20 @@ LSH 协议核心类型
 from dataclasses import dataclass, field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
-import uuid
+import threading
+
+
+_element_counter = 0
+_element_counter_lock = threading.Lock()
+
+
+def _generate_element_id() -> str:
+    """生成元素ID（简单递增，无限扩展）"""
+    global _element_counter
+    with _element_counter_lock:
+        element_id = f"elem_{_element_counter}"
+        _element_counter += 1
+        return element_id
 
 
 @dataclass
@@ -40,18 +54,17 @@ class SceneElement:
         # 创建空白元素
         element = SceneElement.create()
         
-        # 创建沙发
-        sofa = SceneElement.create({
-            "name": "沙发",
-            "category": "furniture",
+        # 创建元素
+        element = SceneElement.create({
+            "name": "客厅",
+            "category": "room",
             "position": [4, 3, 0],
             "size": [2.5, 1, 0.8]
         })
         
         # 属性操作
-        sofa.get_property("name")           # "沙发"
-        sofa.set_property("color", "red")   # 设置颜色
-        sofa.set_property("eng_name", "sofa")  # 扩展英文名
+        element.get_property("name")           # "客厅"
+        element.set_property("color", "red")   # 设置颜色
     """
     properties: Dict[str, Any] = field(default_factory=dict)
     
@@ -59,7 +72,7 @@ class SceneElement:
     def id(self) -> str:
         """元素ID（从属性获取，如不存在则生成）"""
         if "id" not in self.properties:
-            self.properties["id"] = f"elem_{uuid.uuid4().hex[:12]}"
+            self.properties["id"] = _generate_element_id()
         return self.properties["id"]
     
     @property
@@ -70,6 +83,15 @@ class SceneElement:
     @name.setter
     def name(self, value: str):
         self.properties["name"] = value
+    
+    @property
+    def category(self) -> str:
+        """元素分类（从属性获取）"""
+        return self.properties.get("category", "")
+    
+    @category.setter
+    def category(self, value: str):
+        self.properties["category"] = value
     
     def get_property(self, key: str, default: Any = None) -> Any:
         """获取属性"""
@@ -140,7 +162,7 @@ class SceneElement:
         """
         props = (properties or {}).copy()
         if "id" not in props:
-            props["id"] = f"elem_{uuid.uuid4().hex[:12]}"
+            props["id"] = _generate_element_id()
         if "created_at" not in props:
             props["created_at"] = datetime.now().isoformat()
         props["updated_at"] = datetime.now().isoformat()
