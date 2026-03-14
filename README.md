@@ -2,7 +2,7 @@
 
 **Li Shi Hang View Synchronization Protocol**
 
-[![Version](https://img.shields.io/badge/version-3.1.1-blue.svg)](https://github.com/your-repo/lsh-protocol)
+[![Version](https://img.shields.io/badge/version-3.1.2-blue.svg)](https://github.com/your-repo/lsh-protocol)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 [![Status](https://img.shields.io/badge/status-stable-brightgreen.svg)]()
 
@@ -16,6 +16,40 @@ LSH 是一种**虚拟现实统一协议**，定义了场景数据的标准化表
 - **灵活扩展**：通过 `category` 字段实现业务分类，不绑定特定领域
 - **批量优化**：支持事件合并，避免重复刷新
 - **坐标系分离**：对外统一使用 LSH 坐标系，内部渲染层透明转换
+- **position 语义**：统一使用底面中心语义，符合建筑/BIM 习惯
+
+## v3.1.2 坐标系修正
+
+本次版本修正了 VTK 坐标转换公式，确保 2D/3D 视图方向一致：
+
+### 坐标转换公式
+
+**LSH → VTK**：
+```
+VTK(X, Y, Z) = LSH(X, Z, -Y)
+```
+
+**VTK → LSH**：
+```
+LSH(X, Y, Z) = VTK(X, -Z, Y)
+```
+
+### position 语义
+
+**position 表示元素的底面中心**（建筑/BIM 语义）：
+
+```
+        ┌─────────────┐
+        │             │
+        │   元素      │  height (Z)
+        │             │
+        └─────────────┘
+              ↑
+         position (底面中心)
+         (x, y, 0)
+```
+
+贴地放置时，`position.z = FLOOR_THICKNESS`（地板厚度）。
 
 ## v3.1.1 架构改造完成
 
@@ -208,6 +242,7 @@ pytest tests/
 
 | 版本 | 说明 |
 |------|------|
+| 3.1.2 | 坐标系修正：VTK 转换公式 Y 取负；position 语义统一为底面中心；坐标系指示器支持 LSH/VTK 风格切换 |
 | 3.1.1 | 架构改造完成：三模块统一、删除冗余文件、引擎模式统一、净减少 28,588 行代码 |
 | 3.0.1 | 代码实现完善：移除 ElementType 枚举；添加便捷方法；完善 CATEGORY_DEFAULTS |
 | 3.0.0 | 核心概念简化：移除 SPACE/ENTITY 区分，统一为 Element；属性查询机制 |

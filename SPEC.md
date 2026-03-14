@@ -4,10 +4,10 @@
 
 | 属性   | 值                 |
 | ------ | ------------------ |
-| 版本   | 3.1.1              |
+| 版本   | 3.1.2              |
 | 状态   | 正式版 (Release)   |
 | 作者   | 李恒波 (Li Hengbo) |
-| 日期   | 2026-03-12         |
+| 日期   | 2026-03-14         |
 | 许可证 | MIT                |
 
 ---
@@ -589,6 +589,43 @@ Y (深度/depth，向前)
 2. **直觉性**：Z 轴向上，符合"高度"概念
 3. **俯视图兼容**：俯视图直接是 X-Y 平面，无需坐标转换
 
+#### 7.1.1 position 语义
+
+**position 表示元素的底面中心**（建筑/BIM 语义）：
+
+```
+        ┌─────────────┐
+        │             │
+        │   元素      │  height (Z)
+        │             │
+        └─────────────┘
+              ↑
+         position (底面中心)
+         (x, y, 0)
+```
+
+| 属性 | 语义 | 说明 |
+|------|------|------|
+| `position` | 底面中心 | 元素在地面上的投影中心，Z=0 表示贴地放置 |
+| `size` | (width, depth, height) | 宽度、深度、高度 |
+
+**几何中心计算**：
+
+```python
+# 元素几何中心
+center = (
+    position.x,           # X 方向不变
+    position.y,           # Y 方向不变
+    position.z + size.height / 2  # Z 方向偏移半高
+)
+```
+
+**设计原因**：
+
+1. **符合建筑语义**：家具、设备放置在地面，位置直观
+2. **高度独立**：调整高度不影响 X/Y 位置
+3. **2D 兼容**：俯视图中 position 直接对应显示位置
+
 ### 7.2 视图坐标适配
 
 | 视图                      | 原始坐标系 | 适配方式                                        |
@@ -641,12 +678,23 @@ LSH(X, Y, Z) = Godot(X, -Z, Y)
 **LSH → VTK**：
 
 ```
-VTK(X, Y, Z) = LSH(X, Z, Y)
+VTK(X, Y, Z) = LSH(X, Z, -Y)
 
 其中：
 - VTK.X = LSH.X（宽度不变）
 - VTK.Y = LSH.Z（高度映射）
-- VTK.Z = LSH.Y（深度映射）
+- VTK.Z = -LSH.Y（深度取负，因为 VTK Z 轴向前，LSH Y 轴向前）
+```
+
+**VTK → LSH**：
+
+```
+LSH(X, Y, Z) = VTK(X, -Z, Y)
+
+其中：
+- LSH.X = VTK.X
+- LSH.Y = -VTK.Z
+- LSH.Z = VTK.Y
 ```
 
 **LSH → Blender**：
@@ -695,8 +743,18 @@ def godot_to_lsh_bounds(godot_min, godot_max):
 ```python
 def lsh_to_vtk_bounds(lsh_min, lsh_max):
     return {
-        "min": [lsh_min[0], lsh_min[2], lsh_min[1]],
-        "max": [lsh_max[0], lsh_max[2], lsh_max[1]]
+        "min": [lsh_min[0], lsh_min[2], -lsh_max[1]],
+        "max": [lsh_max[0], lsh_max[2], -lsh_min[1]]
+    }
+```
+
+**VTK → LSH 边界**：
+
+```python
+def vtk_to_lsh_bounds(vtk_min, vtk_max):
+    return {
+        "min": [vtk_min[0], -vtk_max[2], vtk_min[1]],
+        "max": [vtk_max[0], -vtk_min[2], vtk_max[1]]
     }
 ```
 
@@ -1014,12 +1072,12 @@ class SceneElement:
     category: str = ""                   # 业务分类（room, device, furniture 等）
   
     # 变换属性
-    position: List[float, float, float] = [0.0, 0.0, 0.0]
+    position: List[float, float, float] = [0.0, 0.0, 0.0]  # 底面中心 (x, y, z) = (右, 前, 0)
     rotation: List[float, float, float] = [0.0, 0.0, 0.0]
     scale: float = 1.0
   
     # 尺寸信息
-    size: List[float, float, float] = [1.0, 1.0, 1.0]
+    size: List[float, float, float] = [1.0, 1.0, 1.0]  # (width, depth, height) = (宽, 深, 高)
   
     # 边界（空间类型需要）
     bounds: Optional[Bounds] = None
